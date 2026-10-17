@@ -39,6 +39,8 @@ Inspect every image with Codex's `view_image`. Record:
 - Exposed intimate body parts or other sensitive content
 - Existing alt text quality
 
+When running through CC Switch with `deepseek-flash`, use `vision-batch` for 3 images at a time instead of parallel `view_image` calls. This avoids a known DeepSeek tool-call history error.
+
 Optionally run DeepSeek vision for a structured second opinion:
 
 ```bash

@@ -605,6 +605,66 @@ def image_data_url(path: Path) -> str:
     return f"data:{mime};base64,{encoded}"
 
 
+def vision_batch(
+    config: dict[str, str],
+    paths: list[Path],
+    batch_size: int,
+    prompt: str,
+) -> dict[str, Any]:
+    batch_size = max(1, min(batch_size, 6))
+    results: list[dict[str, Any]] = []
+    for start in range(0, len(paths), batch_size):
+        chunk = paths[start : start + batch_size]
+        content: list[dict[str, Any]] = []
+        for offset, path in enumerate(chunk, start=start + 1):
+            content.append(
+                {
+                    "type": "text",
+                    "text": f"Image {offset}: {path.name}",
+                }
+            )
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_data_url(path)},
+                }
+            )
+        content.append(
+            {
+                "type": "text",
+                "text": prompt
+                + " Return JSON with an images array. Each item must include index, "
+                "filename, subject, material, scene, has_watermark, watermark_type, "
+                "watermark_notes, sensitive_content, suggested_alt_text, and replacement_risks.",
+            }
+        )
+        raw = call_deepseek(
+            config,
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a precise visual inspector for a sculpture website. "
+                        "Analyze each supplied image independently. Return valid JSON only."
+                    ),
+                },
+                {"role": "user", "content": content},
+            ],
+            response_format={"type": "json_object"},
+        )
+        parsed = parse_json_model_output(raw)
+        batch_results = parsed.get("images") if isinstance(parsed, dict) else None
+        if isinstance(batch_results, list):
+            for index, item in enumerate(batch_results):
+                if isinstance(item, dict):
+                    if index < len(chunk):
+                        item.setdefault("local_path", str(chunk[index].resolve()))
+                    results.append(item)
+        else:
+            results.append({"raw": parsed})
+    return {"image_count": len(paths), "images": results}
+
+
 def get_wan_result_urls(response: Any) -> list[str]:
     output = getattr(response, "output", None)
     if not output:
@@ -868,6 +928,12 @@ def parser() -> argparse.ArgumentParser:
     vision.add_argument("--prompt", default="")
     vision.add_argument("--output", default="")
 
+    vision_batch_parser = sub.add_parser("vision-batch")
+    vision_batch_parser.add_argument("--image", action="append", required=True)
+    vision_batch_parser.add_argument("--batch-size", type=int, default=3)
+    vision_batch_parser.add_argument("--prompt", default="")
+    vision_batch_parser.add_argument("--output", default="")
+
     clean = sub.add_parser("clean-image")
     clean.add_argument("--input", required=True)
     clean.add_argument("--output", required=True)
@@ -930,6 +996,20 @@ def main() -> int:
                 response_format={"type": "json_object"},
             )
             result = parse_json_model_output(raw)
+            output_json(result, args.output)
+            return 0
+
+        if args.command == "vision-batch":
+            prompt = args.prompt or (
+                "Inspect these blog images for editorial use. Identify the sculpture, "
+                "material, scene, watermark, and sensitive-content risks."
+            )
+            result = vision_batch(
+                config,
+                [Path(value).expanduser() for value in args.image],
+                args.batch_size,
+                prompt,
+            )
             output_json(result, args.output)
             return 0
 

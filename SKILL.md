@@ -59,6 +59,30 @@ Read only the references needed for the task:
 - Preserve factual details such as dimensions, locations, dates, materials, and project history. Mark uncertain claims `[VERIFY]` instead of inventing facts.
 - Use English for public website copy unless the user asks for another language.
 
+## CC Switch and DeepSeek Compatibility
+
+DeepSeek Chat rejects history where an assistant `tool_calls` message is not followed immediately by one tool result per `tool_call_id`. Some CC Switch versions mishandle parallel Codex tool calls or interleaved commentary messages, producing HTTP 400 errors such as "insufficient tool messages following tool_calls message".
+
+When using `deepseek-flash` through CC Switch:
+
+- Prefer one bundled Python command over multiple Codex tool calls.
+- Inspect multiple images with `vision-batch`, not parallel `view_image` calls.
+- Keep a single assistant turn to at most 1-3 tool calls and let all results return before writing commentary.
+- Do not put assistant commentary messages between outputs belonging to one parallel tool-call batch.
+- For heavy image QA or large batches, prefer the official Codex provider; use DeepSeek for text, SEO, and small image batches.
+- If this error already occurred in a thread, start a new conversation. Retrying inside the failed thread keeps the invalid tool-call history and will fail again.
+
+Batch image inspection:
+
+```bash
+python scripts/stoneart_blog.py vision-batch \
+  --image work/<slug>/images/one.jpg \
+  --image work/<slug>/images/two.jpg \
+  --image work/<slug>/images/three.jpg \
+  --batch-size 3 \
+  --output work/<slug>/image-vision.json
+```
+
 ## Standard Workflow
 
 ### 1. Establish the target

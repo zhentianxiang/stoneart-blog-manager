@@ -9,6 +9,7 @@
 5. New-blog prompts
 6. Project-image prompt
 7. Short everyday prompts
+8. DeepSeek and CC Switch safety prompt
 
 ## 1. When to Show This Guide
 
@@ -226,4 +227,15 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 
 ```text
 使用 $stoneart-blog-manager 给我看这个 skill 的推荐使用流程和提示词，先不要执行任务。
+```
+
+## 8. DeepSeek and CC Switch Safety Prompt
+
+```text
+使用 $stoneart-blog-manager，当前 Codex 通过 CC Switch 使用 deepseek-flash。
+
+请避免并行工具调用和工具结果之间插入普通助手消息。批量检查图片时使用：
+python scripts/stoneart_blog.py vision-batch --image ... --image ... --batch-size 3
+
+如果这轮已经出现 tool_calls/tool_call_id 400 错误，不要继续当前会话，提醒我新建对话后重新开始。
 ```
