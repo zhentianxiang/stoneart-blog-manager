@@ -1,0 +1,41 @@
+{
+  "skill_name": "stoneart-blog-manager",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "检查我网站上一篇现有博客里的图片，判断哪些有水印，并给我替换方案，先不要修改线上内容。",
+      "expected_output": "Fetches the article, downloads and inspects images, classifies watermarks and sensitive content, and returns a replacement manifest without writes.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "用素材库里的大理石喷泉图片写一篇面向别墅业主的 Google SEO 博客草稿，先不要发布。",
+      "expected_output": "Researches existing content, proposes a focused topic, produces SEO metadata and body HTML from evidence, and saves a draft only.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "把这篇博客的图片换成无水印版本，并同步修改封面、正文图片和 alt，修改前先预览。",
+      "expected_output": "Inspects and cleans or sources replacements, uploads assets, previews article changes, applies only after confirmation, and checks references.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "我想写一篇 Marble Fountain Buying Guide for Villa Gardens，先检查网站是不是已经有重复博客。",
+      "expected_output": "Runs both deterministic and semantic topic checks, reports the overlapping articles, and rejects the generic topic with a more specific angle.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "从素材库找几张没用过的大理石喷泉图片，判断能不能写一篇新的安装指南。",
+      "expected_output": "Filters media to unused assets, inspects image content, verifies article usage, checks topic duplication, and explains whether the image set supports a distinct installation-focused article.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "这个 skill 应该怎么用？先告诉我推荐的流程和提示词。",
+      "expected_output": "Reads the usage guide, presents a concise workflow menu with copyable prompts, asks which workflow to start, and performs no production API writes.",
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+config.local.env
+work/
+outputs/
+*.log
+__pycache__/
+*.pyc
