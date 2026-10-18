@@ -19,6 +19,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
@@ -339,6 +340,16 @@ def blog_public_url(config: dict[str, str], slug: str) -> str:
     return config["STONEART_BASE_URL"].rstrip("/") + f"/blog/{slug}/"
 
 
+def notification_time(config: dict[str, str]) -> str:
+    timezone_name = config.get("FEISHU_TIMEZONE", "Asia/Shanghai").strip()
+    try:
+        zone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        timezone_name = "Asia/Shanghai"
+        zone = ZoneInfo(timezone_name)
+    return datetime.now(zone).strftime("%Y-%m-%d %H:%M %Z")
+
+
 def notify_feishu_blog(
     config: dict[str, str],
     *,
@@ -415,9 +426,7 @@ def notify_feishu_blog(
         detail_lines.append(f"**修改字段：** {', '.join(changed_labels)}")
     if note:
         detail_lines.append(f"**说明：** {note}")
-    detail_lines.append(
-        f"**时间：** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
-    )
+    detail_lines.append(f"**时间：** {notification_time(config)}")
 
     template = {
         "published": "green",

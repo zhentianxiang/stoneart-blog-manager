@@ -114,6 +114,6 @@ Add `--dry-run` to `create-blog` or `update-blog` to inspect the exact payload a
 
 ## Feishu Blog Notifications
 
-The CLI signs Feishu custom-bot requests with the current Unix timestamp and `FEISHU_BLOG_WEBHOOK_SECRET`. It sends interactive cards after successful create, update, publish, and applied image-replacement operations.
+The CLI signs Feishu custom-bot requests with the current Unix timestamp and `FEISHU_BLOG_WEBHOOK_SECRET`. It sends interactive cards after successful create, update, publish, and applied image-replacement operations. Display time uses `FEISHU_TIMEZONE` and defaults to `Asia/Shanghai`.
 
 Notification failures are returned under `"notification"` but do not undo the saved article. Use `--no-notify` only for intentional silent operations.

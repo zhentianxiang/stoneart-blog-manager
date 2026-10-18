@@ -32,6 +32,7 @@ Feishu blog notifications use:
 - `FEISHU_BLOG_WEBHOOK_URL`
 - `FEISHU_BLOG_WEBHOOK_SECRET`
 - `FEISHU_BLOG_NOTIFY_ENABLED=true`
+- `FEISHU_TIMEZONE=Asia/Shanghai`
 
 ## Start With a Usage Guide When the Task Is Open-Ended
 
@@ -258,7 +259,7 @@ The CLI automatically sends notifications after:
 - Changing a blog from draft to published
 - Applying an image URL replacement to a blog
 
-The card includes action, title, status, article ID, author, changed field labels, timestamp, and a button to open the public article or admin page.
+The card includes action, title, status, article ID, author, changed field labels, local time in `FEISHU_TIMEZONE`, and a button to open the public article or admin page.
 
 Test the signed webhook without changing content:
 
