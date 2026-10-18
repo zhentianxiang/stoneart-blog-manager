@@ -350,6 +350,53 @@ def notification_time(config: dict[str, str]) -> str:
     return datetime.now(zone).strftime("%Y-%m-%d %H:%M %Z")
 
 
+def is_chinese_title(value: str) -> bool:
+    letters = [char for char in value if char.isalpha()]
+    chinese = [
+        char for char in letters if "\u4e00" <= char <= "\u9fff"
+    ]
+    if not chinese:
+        return False
+    return len(chinese) >= max(1, round(len(letters) * 0.3))
+
+
+def translate_blog_title_zh(config: dict[str, str], title: str) -> str:
+    title = title.strip()
+    if not title or is_chinese_title(title):
+        return title
+    try:
+        raw = call_deepseek(
+            config,
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "Translate Stone Art Sculpture blog titles into natural "
+                        "Simplified Chinese. Return only the translated title, "
+                        "without quotes, labels, explanations, or extra lines."
+                    ),
+                },
+                {"role": "user", "content": title},
+            ],
+            temperature=0.1,
+            max_tokens=200,
+        )
+    except Exception:
+        return ""
+
+    translated = raw.strip().strip("`").strip()
+    first_line = next(
+        (line.strip() for line in translated.splitlines() if line.strip()), ""
+    )
+    first_line = re.sub(
+        r"^(?:中文标题|简体中文标题|标题)\s*[：:]\s*", "", first_line
+    )
+    first_line = first_line.strip().strip("\"'“”‘’").strip()
+    if not first_line or first_line == title or not is_chinese_title(first_line):
+        return ""
+    return first_line
+
+
 def notify_feishu_blog(
     config: dict[str, str],
     *,
@@ -415,8 +462,11 @@ def notify_feishu_blog(
     detail_lines = [
         f"**操作：** {action}",
         f"**标题：** {title}",
-        f"**状态：** {status_label}",
     ]
+    translated_title = translate_blog_title_zh(config, title)
+    if translated_title and translated_title != title:
+        detail_lines.append(f"**中文标题：** {translated_title}")
+    detail_lines.append(f"**状态：** {status_label}")
     if article.get("id"):
         detail_lines.append(f"**文章 ID：** {article['id']}")
     if article.get("author_name"):
@@ -744,6 +794,8 @@ def call_deepseek(
     messages: list[dict[str, Any]],
     *,
     response_format: dict[str, str] | None = None,
+    temperature: float = 0.35,
+    max_tokens: int = 12000,
     timeout: int = 240,
 ) -> str:
     base = config["DEEPSEEK_BASE_URL"].rstrip("/")
@@ -754,8 +806,8 @@ def call_deepseek(
     body: dict[str, Any] = {
         "model": config.get("DEEPSEEK_MODEL", "deepseek-flash"),
         "messages": messages,
-        "temperature": 0.35,
-        "max_tokens": 12000,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
     }
     if response_format:
         body["response_format"] = response_format

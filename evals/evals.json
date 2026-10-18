@@ -42,6 +42,12 @@
       "prompt": "测试一下飞书通知，然后告诉我以后修改博客会不会收到通知。",
       "expected_output": "Sends one signed Feishu test card and confirms that blog creation, updates, publication, and image replacements notify automatically without rolling back successful saves.",
       "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "飞书通知里的英文博客标题帮我自动翻成中文，中文标题不要重复翻译，翻译失败也别影响博客保存。",
+      "expected_output": "Adds a Chinese title line under the English title using DeepSeek, reuses Chinese titles directly, and silently skips translation failures without affecting save or publish.",
+      "files": []
     }
   ]
 }

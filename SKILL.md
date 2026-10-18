@@ -259,7 +259,9 @@ The CLI automatically sends notifications after:
 - Changing a blog from draft to published
 - Applying an image URL replacement to a blog
 
-The card includes action, title, status, article ID, author, changed field labels, local time in `FEISHU_TIMEZONE`, a clickable public article link for published posts, an admin edit link, and matching action buttons.
+The card includes action, title, a Simplified Chinese translation of English titles, status, article ID, author, changed field labels, local time in `FEISHU_TIMEZONE`, a clickable public article link for published posts, an admin edit link, and matching action buttons.
+
+Title translation calls the configured DeepSeek model only when the title is predominantly English. Chinese titles are reused directly. Translation errors are silently ignored and omit the Chinese title line; they never affect article saving, updating, publishing, or notification delivery.
 
 Test the signed webhook without changing content:
 

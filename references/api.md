@@ -116,4 +116,4 @@ Add `--dry-run` to `create-blog` or `update-blog` to inspect the exact payload a
 
 The CLI signs Feishu custom-bot requests with the current Unix timestamp and `FEISHU_BLOG_WEBHOOK_SECRET`. It sends interactive cards after successful create, update, publish, and applied image-replacement operations. Display time uses `FEISHU_TIMEZONE` and defaults to `Asia/Shanghai`.
 
-Published cards include both the public article URL and admin edit URL. Draft cards include the admin edit URL. Notification failures are returned under `"notification"` but do not undo the saved article. Use `--no-notify` only for intentional silent operations.
+Published cards include both the public article URL and admin edit URL. Draft cards include the admin edit URL. English titles are translated to Simplified Chinese with DeepSeek; translation failures silently omit the extra title line and never affect article saving. Notification failures are returned under `"notification"` but do not undo the saved article. Use `--no-notify` only for intentional silent operations.

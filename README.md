@@ -19,6 +19,7 @@ Codex skill for managing Stone Art Sculpture blogs, project images, media-librar
 - Send signed Feishu cards for blog creation, publication, updates, and image replacements
 - Format Feishu notification times in configurable local time rather than UTC
 - Include clickable public article and admin edit links in Feishu cards
+- Add a DeepSeek-generated Simplified Chinese title line for English blog titles
 
 ## Install
 
