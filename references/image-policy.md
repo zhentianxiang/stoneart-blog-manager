@@ -6,7 +6,7 @@
 2. Image inspection
 3. Watermark classifications
 4. Sensitive-content rule
-5. Qwen-Image-2.1 cleaning
+5. Wan2.7 cleaning
 6. Web replacement sourcing
 7. Upload and article update
 8. Visual QA
@@ -64,7 +64,7 @@ Replace only `foreign` and confirmed unwanted `uncertain` watermarks. Do not run
 
 ## 4. Sensitive-Content Rule
 
-Do not send images containing exposed intimate body parts to Qwen-Image-2.1 or another generative editor. This includes explicit nudity or close-ups of genitalia, buttocks, or breasts.
+Do not send images containing exposed intimate body parts to Wan2.7 or another generative editor. This includes explicit nudity or close-ups of genitalia, buttocks, or breasts.
 
 For classical sculpture:
 
@@ -74,7 +74,7 @@ For classical sculpture:
 - Do not use random search thumbnails or images with unclear ownership.
 - If minors are involved in a sensitive context, stop and ask the user.
 
-## 5. Qwen-Image-2.1 Cleaning
+## 5. Wan2.7 Cleaning
 
 Use the default preservation prompt:
 
@@ -170,7 +170,7 @@ Save one JSON object per image in `work/<slug>/image-manifest.json`:
   "watermark_type": "foreign",
   "watermark_notes": "Stock URL in lower-right corner",
   "sensitive_content": false,
-  "action": "qwen_clean",
+  "action": "wan_clean",
   "cleaned_path": "work/example-slug/images/old-clean.jpg",
   "new_url": "/uploads/new.jpg",
   "source_page": "",
