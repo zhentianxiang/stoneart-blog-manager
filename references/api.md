@@ -107,6 +107,13 @@ python scripts/stoneart_blog.py image-usage --url /uploads/example.jpg
 python scripts/stoneart_blog.py upload-media --file image.jpg
 python scripts/stoneart_blog.py create-blog --file draft.json
 python scripts/stoneart_blog.py update-blog --id 123 --file patch.json
+python scripts/stoneart_blog.py test-feishu
 ```
 
 Add `--dry-run` to `create-blog` or `update-blog` to inspect the exact payload and changed fields without writing. Use `--help` on any command for the full argument list.
+
+## Feishu Blog Notifications
+
+The CLI signs Feishu custom-bot requests with the current Unix timestamp and `FEISHU_BLOG_WEBHOOK_SECRET`. It sends interactive cards after successful create, update, publish, and applied image-replacement operations.
+
+Notification failures are returned under `"notification"` but do not undo the saved article. Use `--no-notify` only for intentional silent operations.

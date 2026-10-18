@@ -27,6 +27,12 @@ python scripts/stoneart_blog.py --help
 
 `DEEPSEEK_MODEL=deepseek-flash` maps to the current DeepSeek V4.1 Flash model exposed by the configured API. It supports text and image input.
 
+Feishu blog notifications use:
+
+- `FEISHU_BLOG_WEBHOOK_URL`
+- `FEISHU_BLOG_WEBHOOK_SECRET`
+- `FEISHU_BLOG_NOTIFY_ENABLED=true`
+
 ## Start With a Usage Guide When the Task Is Open-Ended
 
 When the user asks "how do I use this skill", asks for prompt examples, says they do not know where to start, or invokes the skill without a concrete article, image, project, or topic:
@@ -56,6 +62,8 @@ Read only the references needed for the task:
 - Keep an evidence manifest under `work/<slug>/image-manifest.json` for image work.
 - Never delete a media asset unless the user explicitly approved deletion and the asset has zero references. Use `delete-media --confirm`.
 - Never silently overwrite an existing article with model-generated text. Show the proposed title, excerpt, SEO fields, image changes, and a concise diff before `--apply`.
+- Blog creation, article updates, publication changes, and applied blog image replacements send a signed Feishu card after a successful save.
+- A notification failure must never roll back or hide a successful article save. Report notification status separately.
 - Preserve factual details such as dimensions, locations, dates, materials, and project history. Mark uncertain claims `[VERIFY]` instead of inventing facts.
 - Use English for public website copy unless the user asks for another language.
 
@@ -240,6 +248,31 @@ After saving, fetch the article again and verify title, slug, status, author, co
 ### 7. Publish only on explicit request
 
 Publish by creating a patch file with `"status": "published"` and running `update-blog`. Then verify the public URL and HTTP 200 response.
+
+## Feishu Notifications
+
+The CLI automatically sends notifications after:
+
+- Creating a new blog draft or publishing a new blog
+- Updating an existing blog and changing one or more fields
+- Changing a blog from draft to published
+- Applying an image URL replacement to a blog
+
+The card includes action, title, status, article ID, author, changed field labels, timestamp, and a button to open the public article or admin page.
+
+Test the signed webhook without changing content:
+
+```bash
+python scripts/stoneart_blog.py test-feishu
+```
+
+Suppress one notification when intentionally performing a silent update:
+
+```bash
+python scripts/stoneart_blog.py update-blog ... --no-notify
+```
+
+Do not suppress notifications for normal publishing or editorial updates unless the user requested it.
 
 ## Image Decision Matrix
 

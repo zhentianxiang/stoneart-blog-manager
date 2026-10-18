@@ -7,6 +7,7 @@ import argparse
 import base64
 import difflib
 import hashlib
+import hmac
 import json
 import mimetypes
 import os
@@ -100,7 +101,9 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, str]:
         if key in os.environ:
             values[key] = os.environ[key]
     for key, value in os.environ.items():
-        if key.startswith(("STONEART_", "ALIYUN_", "DEEPSEEK_", "WAN_", "DEFAULT_AUTHOR_")):
+        if key.startswith(
+            ("STONEART_", "ALIYUN_", "DEEPSEEK_", "WAN_", "FEISHU_", "DEFAULT_AUTHOR_")
+        ):
             values[key] = value
     return values
 
@@ -318,6 +321,172 @@ def output_json(payload: Any, path: str = "") -> None:
     if path:
         write_json(Path(path).expanduser(), payload)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
+def feishu_signature(secret: str, timestamp: str) -> str:
+    string_to_sign = f"{timestamp}\n{secret}"
+    digest = hmac.new(
+        string_to_sign.encode("utf-8"), digestmod=hashlib.sha256
+    ).digest()
+    return base64.b64encode(digest).decode("utf-8")
+
+
+def blog_admin_url(config: dict[str, str]) -> str:
+    return config["STONEART_BASE_URL"].rstrip("/") + "/admin/#blog"
+
+
+def blog_public_url(config: dict[str, str], slug: str) -> str:
+    return config["STONEART_BASE_URL"].rstrip("/") + f"/blog/{slug}/"
+
+
+def notify_feishu_blog(
+    config: dict[str, str],
+    *,
+    event: str,
+    article: dict[str, Any],
+    changes: dict[str, Any] | None = None,
+    note: str = "",
+) -> dict[str, Any]:
+    if config.get("FEISHU_BLOG_NOTIFY_ENABLED", "true").lower() not in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return {"enabled": False, "ok": True, "skipped": "disabled"}
+
+    webhook = config.get("FEISHU_BLOG_WEBHOOK_URL", "").strip()
+    secret = config.get("FEISHU_BLOG_WEBHOOK_SECRET", "").strip()
+    if not webhook or not secret:
+        return {
+            "enabled": False,
+            "ok": True,
+            "skipped": "webhook configuration missing",
+        }
+
+    action_labels = {
+        "created": "新建博客",
+        "published": "发布新博客",
+        "updated": "修改博客",
+        "image_updated": "替换博客图片",
+        "test": "飞书通知测试",
+    }
+    action = action_labels.get(event, event)
+    status = str(article.get("status") or "draft")
+    status_label = "已发布" if status == "published" else "草稿"
+    slug = str(article.get("slug") or "")
+    title = str(article.get("title") or f"博客 {article.get('id', '')}").strip()
+    public_url = blog_public_url(config, slug) if slug else ""
+    target_url = public_url if status == "published" and public_url else blog_admin_url(config)
+    button_label = "查看博客" if status == "published" and public_url else "打开后台"
+
+    field_labels = {
+        "title": "标题",
+        "slug": "Slug",
+        "excerpt": "摘要",
+        "body_html": "正文",
+        "cover_image": "封面图片",
+        "published_at": "发布日期",
+        "seo_title": "SEO 标题",
+        "seo_description": "SEO 描述",
+        "status": "发布状态",
+        "sort_order": "排序",
+        "author_name": "作者",
+        "author_role": "职位",
+        "author_bio": "作者简介",
+        "author_avatar": "作者头像",
+        "show_toc": "自动目录",
+    }
+    changed_labels = [
+        field_labels.get(key, key)
+        for key in (changes or {})
+        if key in field_labels
+    ]
+    detail_lines = [
+        f"**操作：** {action}",
+        f"**标题：** {title}",
+        f"**状态：** {status_label}",
+    ]
+    if article.get("id"):
+        detail_lines.append(f"**文章 ID：** {article['id']}")
+    if article.get("author_name"):
+        detail_lines.append(f"**作者：** {article['author_name']}")
+    if changed_labels:
+        detail_lines.append(f"**修改字段：** {', '.join(changed_labels)}")
+    if note:
+        detail_lines.append(f"**说明：** {note}")
+    detail_lines.append(
+        f"**时间：** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
+    )
+
+    template = {
+        "published": "green",
+        "created": "blue",
+        "updated": "orange",
+        "image_updated": "orange",
+        "test": "wathet",
+    }.get(event, "blue")
+    payload = {
+        "msg_type": "interactive",
+        "card": {
+            "config": {"wide_screen_mode": True},
+            "header": {
+                "template": template,
+                "title": {"tag": "plain_text", "content": f"Stone Art 博客通知 · {action}"},
+            },
+            "elements": [
+                {
+                    "tag": "div",
+                    "text": {"tag": "lark_md", "content": "\n".join(detail_lines)},
+                },
+                {
+                    "tag": "action",
+                    "actions": [
+                        {
+                            "tag": "button",
+                            "type": "primary",
+                            "text": {"tag": "plain_text", "content": button_label},
+                            "url": target_url,
+                        }
+                    ],
+                },
+            ],
+        },
+    }
+    timestamp = str(int(time.time()))
+    payload["timestamp"] = timestamp
+    payload["sign"] = feishu_signature(secret, timestamp)
+    response = requests.post(webhook, json=payload, timeout=30)
+    body = safe_json(response)
+    if response.status_code >= 400:
+        raise ApiError(response.status_code, "Feishu webhook request failed", body)
+    if body.get("StatusCode", body.get("code", 0)) not in {0, "0"}:
+        raise ApiError(
+            response.status_code,
+            body.get("StatusMessage") or body.get("msg") or "Feishu webhook rejected",
+            body,
+        )
+    return {"enabled": True, "ok": True, "response": body}
+
+
+def safe_notify_feishu_blog(
+    config: dict[str, str],
+    *,
+    event: str,
+    article: dict[str, Any],
+    changes: dict[str, Any] | None = None,
+    note: str = "",
+) -> dict[str, Any]:
+    try:
+        return notify_feishu_blog(
+            config,
+            event=event,
+            article=article,
+            changes=changes,
+            note=note,
+        )
+    except Exception as exc:
+        return {"enabled": True, "ok": False, "error": str(exc)}
 
 
 def writable_article(item: dict[str, Any]) -> dict[str, Any]:
@@ -885,12 +1054,14 @@ def parser() -> argparse.ArgumentParser:
     create = sub.add_parser("create-blog")
     create.add_argument("--file", required=True)
     create.add_argument("--dry-run", action="store_true")
+    create.add_argument("--no-notify", action="store_true")
 
     update = sub.add_parser("update-blog")
     update.add_argument("--id", type=int, required=True)
     update.add_argument("--file", required=True)
     update.add_argument("--force", action="store_true")
     update.add_argument("--dry-run", action="store_true")
+    update.add_argument("--no-notify", action="store_true")
 
     list_media = sub.add_parser("list-media")
     list_media.add_argument("--query", default="")
@@ -918,6 +1089,7 @@ def parser() -> argparse.ArgumentParser:
     replace.add_argument("--new-url", required=True)
     replace.add_argument("--skip-cover", action="store_true")
     replace.add_argument("--apply", action="store_true")
+    replace.add_argument("--no-notify", action="store_true")
 
     download = sub.add_parser("download-url")
     download.add_argument("--url", required=True)
@@ -945,6 +1117,8 @@ def parser() -> argparse.ArgumentParser:
     seo.add_argument("--input", default="")
     seo.add_argument("--brief", default="")
     seo.add_argument("--output", required=True)
+
+    sub.add_parser("test-feishu", help="Send a signed Feishu webhook test card")
 
     return root
 
@@ -1066,6 +1240,22 @@ def main() -> int:
             )
             result = parse_json_model_output(raw)
             write_json(Path(args.output).expanduser(), result)
+            output_json(result)
+            return 0
+
+        if args.command == "test-feishu":
+            result = notify_feishu_blog(
+                config,
+                event="test",
+                article={
+                    "id": 0,
+                    "title": "Stone Art 博客通知测试",
+                    "slug": "",
+                    "status": "draft",
+                    "author_name": config.get("DEFAULT_AUTHOR_NAME", ""),
+                },
+                note="飞书 Webhook、签名和卡片发送验证成功。",
+            )
             output_json(result)
             return 0
 
@@ -1212,12 +1402,22 @@ def main() -> int:
                 output_json({"ok": True, "dry_run": True, "payload": payload})
                 return 0
             result = client.save_blog(payload)
+            notification = (
+                {"enabled": False, "ok": True, "skipped": "disabled by --no-notify"}
+                if args.no_notify
+                else safe_notify_feishu_blog(
+                    config,
+                    event="published" if payload.get("status") == "published" else "created",
+                    article={**payload, "id": result.get("id")},
+                )
+            )
             output_json(
                 {
                     "ok": True,
                     "id": result.get("id"),
                     "public_url": f"/blog/{payload['slug']}/",
                     "status": payload.get("status", "draft"),
+                    "notification": notification,
                 }
             )
             return 0
@@ -1255,6 +1455,21 @@ def main() -> int:
                 return 0
             backup = backup_article(current)
             result = client.save_blog(merged, args.id)
+            notification = (
+                {"enabled": False, "ok": True, "skipped": "disabled by --no-notify"}
+                if args.no_notify or not changed
+                else safe_notify_feishu_blog(
+                    config,
+                    event=(
+                        "published"
+                        if merged.get("status") == "published"
+                        and current.get("status") != "published"
+                        else "updated"
+                    ),
+                    article={**merged, "id": result.get("id", args.id)},
+                    changes=changed,
+                )
+            )
             output_json(
                 {
                     "ok": True,
@@ -1262,6 +1477,7 @@ def main() -> int:
                     "backup": str(backup.resolve()),
                     "public_url": f"/blog/{merged['slug']}/",
                     "status": merged.get("status"),
+                    "notification": notification,
                 }
             )
             return 0
@@ -1320,15 +1536,32 @@ def main() -> int:
             patch = {"body_html": body.replace(args.old_url, args.new_url)}
             if updates_cover:
                 patch["cover_image"] = args.new_url
+            image_changes: dict[str, Any] = {}
+            if count:
+                image_changes["body_html"] = patch["body_html"]
+            if updates_cover:
+                image_changes["cover_image"] = args.new_url
             backup = backup_article(article)
             merged = writable_article(article)
             merged.update(patch)
             client.save_article(args.kind, merged, args.id)
+            notification = (
+                {"enabled": False, "ok": True, "skipped": "disabled by --no-notify"}
+                if args.no_notify or args.kind != "blog"
+                else safe_notify_feishu_blog(
+                    config,
+                    event="image_updated",
+                    article={**merged, "id": args.id},
+                    changes=image_changes,
+                    note=f"替换图片 {args.old_url} → {args.new_url}",
+                )
+            )
             output_json(
                 {
                     **preview,
                     "ok": True,
                     "backup": str(backup.resolve()),
+                    "notification": notification,
                 }
             )
             return 0

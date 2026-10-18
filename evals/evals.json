@@ -36,6 +36,12 @@
       "prompt": "这个 skill 应该怎么用？先告诉我推荐的流程和提示词。",
       "expected_output": "Reads the usage guide, presents a concise workflow menu with copyable prompts, asks which workflow to start, and performs no production API writes.",
       "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "测试一下飞书通知，然后告诉我以后修改博客会不会收到通知。",
+      "expected_output": "Sends one signed Feishu test card and confirms that blog creation, updates, publication, and image replacements notify automatically without rolling back successful saves.",
+      "files": []
     }
   ]
 }

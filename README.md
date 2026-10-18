@@ -16,6 +16,7 @@ Codex skill for managing Stone Art Sculpture blogs, project images, media-librar
 - Update cover, body image URLs, and alt text
 - Back up articles before updates
 - Keep all new content as drafts by default
+- Send signed Feishu cards for blog creation, publication, updates, and image replacements
 
 ## Install
 
