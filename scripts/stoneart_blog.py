@@ -388,8 +388,7 @@ def notify_feishu_blog(
     slug = str(article.get("slug") or "")
     title = str(article.get("title") or f"博客 {article.get('id', '')}").strip()
     public_url = blog_public_url(config, slug) if slug else ""
-    target_url = public_url if status == "published" and public_url else blog_admin_url(config)
-    button_label = "查看博客" if status == "published" and public_url else "打开后台"
+    admin_url = blog_admin_url(config)
 
     field_labels = {
         "title": "标题",
@@ -426,7 +425,29 @@ def notify_feishu_blog(
         detail_lines.append(f"**修改字段：** {', '.join(changed_labels)}")
     if note:
         detail_lines.append(f"**说明：** {note}")
+    if status == "published" and public_url:
+        detail_lines.append(f"**文章链接：** [查看博客]({public_url})")
+    detail_lines.append(f"**后台编辑：** [打开后台]({admin_url})")
     detail_lines.append(f"**时间：** {notification_time(config)}")
+
+    actions = []
+    if status == "published" and public_url:
+        actions.append(
+            {
+                "tag": "button",
+                "type": "primary",
+                "text": {"tag": "plain_text", "content": "查看博客"},
+                "url": public_url,
+            }
+        )
+    actions.append(
+        {
+            "tag": "button",
+            "type": "default",
+            "text": {"tag": "plain_text", "content": "后台编辑"},
+            "url": admin_url,
+        }
+    )
 
     template = {
         "published": "green",
@@ -450,14 +471,7 @@ def notify_feishu_blog(
                 },
                 {
                     "tag": "action",
-                    "actions": [
-                        {
-                            "tag": "button",
-                            "type": "primary",
-                            "text": {"tag": "plain_text", "content": button_label},
-                            "url": target_url,
-                        }
-                    ],
+                    "actions": actions,
                 },
             ],
         },
@@ -1127,7 +1141,14 @@ def parser() -> argparse.ArgumentParser:
     seo.add_argument("--brief", default="")
     seo.add_argument("--output", required=True)
 
-    sub.add_parser("test-feishu", help="Send a signed Feishu webhook test card")
+    test_feishu = sub.add_parser(
+        "test-feishu", help="Send a signed Feishu webhook test card"
+    )
+    test_feishu.add_argument("--title", default="Stone Art 博客通知测试")
+    test_feishu.add_argument("--slug", default="")
+    test_feishu.add_argument(
+        "--status", choices=["draft", "published"], default="draft"
+    )
 
     return root
 
@@ -1258,9 +1279,9 @@ def main() -> int:
                 event="test",
                 article={
                     "id": 0,
-                    "title": "Stone Art 博客通知测试",
-                    "slug": "",
-                    "status": "draft",
+                    "title": args.title,
+                    "slug": args.slug,
+                    "status": args.status,
                     "author_name": config.get("DEFAULT_AUTHOR_NAME", ""),
                 },
                 note="飞书 Webhook、签名和卡片发送验证成功。",

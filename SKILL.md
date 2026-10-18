@@ -259,12 +259,21 @@ The CLI automatically sends notifications after:
 - Changing a blog from draft to published
 - Applying an image URL replacement to a blog
 
-The card includes action, title, status, article ID, author, changed field labels, local time in `FEISHU_TIMEZONE`, and a button to open the public article or admin page.
+The card includes action, title, status, article ID, author, changed field labels, local time in `FEISHU_TIMEZONE`, a clickable public article link for published posts, an admin edit link, and matching action buttons.
 
 Test the signed webhook without changing content:
 
 ```bash
 python scripts/stoneart_blog.py test-feishu
+```
+
+Test with a real published link:
+
+```bash
+python scripts/stoneart_blog.py test-feishu \
+  --title "Finding the Perfect Marble Fountain" \
+  --slug "the-top-marble-water-fountain-designs-in-2022" \
+  --status published
 ```
 
 Suppress one notification when intentionally performing a silent update:

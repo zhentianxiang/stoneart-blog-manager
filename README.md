@@ -18,6 +18,7 @@ Codex skill for managing Stone Art Sculpture blogs, project images, media-librar
 - Keep all new content as drafts by default
 - Send signed Feishu cards for blog creation, publication, updates, and image replacements
 - Format Feishu notification times in configurable local time rather than UTC
+- Include clickable public article and admin edit links in Feishu cards
 
 ## Install
 
