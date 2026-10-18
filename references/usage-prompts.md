@@ -65,7 +65,7 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 
 要求：
 - 只处理确认有水印的图片
-- 无水印图片不调用 Wan2.7
+- 无水印图片不调用 Qwen-Image-2.1
 - 有敏感内容的图片不发给生成模型
 - 新图片先上传素材库
 - 替换正文和封面 URL，并优化图片 alt
@@ -88,7 +88,7 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 - 记录文章 ID、标题、URL、图片 URL、水印情况、敏感内容、建议动作
 - 输出 work/all-blogs-image-audit.json
 
-不要调用 Wan2.7 做全量去水印。先给我盘点报告。
+不要调用 Qwen-Image-2.1 做全量去水印。先给我盘点报告。
 ```
 
 ### Process one batch
@@ -203,7 +203,7 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 先 list-projects 找到项目 ID，再下载图片并逐张识图。检查水印、敏感内容、图片重复使用情况和文章关联。
 
 只输出替换方案，不修改项目。确认后再：
-- 使用 Wan2.7 或授权图片替换
+- 使用 Qwen-Image-2.1 或授权图片替换
 - 上传新素材
 - 使用 replace-article-image --kind project 预览
 - 确认后 apply

@@ -10,7 +10,7 @@ Codex skill for managing Stone Art Sculpture blogs, project images, media-librar
 - Prefer unused media and detect repeated images across blogs/projects
 - Download and inspect article images locally
 - Detect watermarks with Codex and optional DeepSeek vision
-- Clean watermarked images with Alibaba Wan2.7
+- Clean watermarked images with Qwen-Image-2.1
 - Replace sensitive images with licensed no-watermark sources
 - Upload replacements to the Stone Art media library
 - Update cover, body image URLs, and alt text

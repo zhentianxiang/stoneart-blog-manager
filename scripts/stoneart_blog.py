@@ -100,7 +100,7 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, str]:
         if key in os.environ:
             values[key] = os.environ[key]
     for key, value in os.environ.items():
-        if key.startswith(("STONEART_", "ALIYUN_", "DEEPSEEK_", "WAN_", "DEFAULT_AUTHOR_")):
+        if key.startswith(("STONEART_", "QWEN_", "DEEPSEEK_", "DEFAULT_AUTHOR_")):
             values[key] = value
     return values
 
@@ -665,25 +665,6 @@ def vision_batch(
     return {"image_count": len(paths), "images": results}
 
 
-def get_wan_result_urls(response: Any) -> list[str]:
-    output = getattr(response, "output", None)
-    if not output:
-        return []
-    urls: list[str] = []
-    for item in getattr(output, "results", None) or []:
-        url = getattr(item, "url", None)
-        if url:
-            urls.append(url)
-    for choice in getattr(output, "choices", None) or []:
-        content = getattr(getattr(choice, "message", None), "content", None)
-        if not isinstance(content, list):
-            continue
-        for item in content:
-            if isinstance(item, dict) and item.get("image"):
-                urls.append(item["image"])
-    return urls
-
-
 def collect_image_urls(value: Any) -> list[str]:
     urls: list[str] = []
     if isinstance(value, str):
@@ -701,16 +682,16 @@ def collect_image_urls(value: Any) -> list[str]:
     return urls
 
 
-def call_wan_compatible(
+def call_qwen_image(
     config: dict[str, str], input_path: Path, prompt: str, size: str
 ) -> str:
-    base = config["ALIYUN_WAN_COMPATIBLE_BASE_URL"].rstrip("/")
+    base = config["QWEN_IMAGE_BASE_URL"].rstrip("/")
     headers = {
-        "Authorization": f"Bearer {config['ALIYUN_DASHSCOPE_API_KEY']}",
+        "Authorization": f"Bearer {config['QWEN_IMAGE_API_KEY']}",
         "Content-Type": "application/json",
     }
     payload = {
-        "model": config.get("WAN_IMAGE_MODEL", "wan2.7-image"),
+        "model": config.get("QWEN_IMAGE_MODEL", "qwen-image-2.1-pro"),
         "messages": [
             {
                 "role": "user",
@@ -730,12 +711,12 @@ def call_wan_compatible(
     if response.status_code >= 400:
         raise ApiError(
             response.status_code,
-            body.get("error", "Wan2.7 compatible request failed"),
+            body.get("error", "Qwen Image request failed"),
             body,
         )
     urls = collect_image_urls(body)
     if not urls:
-        raise ApiError(500, "Wan2.7 compatible response contained no image URL", body)
+        raise ApiError(500, "Qwen Image response contained no image URL", body)
     return urls[0]
 
 
@@ -754,39 +735,7 @@ def clean_image(
     with Image.open(input_path) as source:
         original = ImageOps.exif_transpose(source).convert("RGB")
         original_size = original.size
-    engine = "compatible"
-    try:
-        remote_url = call_wan_compatible(config, input_path, prompt, size)
-    except Exception:
-        try:
-            import dashscope
-            from dashscope.aigc.image_generation import ImageGeneration
-            from dashscope.api_entities.dashscope_response import Message
-        except ImportError:
-            raise
-        dashscope.base_http_api_url = config["ALIYUN_WAN_DASHSCOPE_BASE_URL"]
-        response = ImageGeneration.call(
-            model=config.get("WAN_IMAGE_MODEL", "wan2.7-image"),
-            api_key=config["ALIYUN_DASHSCOPE_API_KEY"],
-            messages=[
-                Message(
-                    role="user",
-                    content=[{"image": image_data_url(input_path)}, {"text": prompt}],
-                )
-            ],
-            n=1,
-            size=size,
-        )
-        if getattr(response, "status_code", 500) != 200:
-            raise RuntimeError(
-                f"Wan2.7 failed: status={getattr(response, 'status_code', '')} "
-                f"code={getattr(response, 'code', '')} message={getattr(response, 'message', '')}"
-            )
-        urls = get_wan_result_urls(response)
-        if not urls:
-            raise RuntimeError("Wan2.7 returned no image URL")
-        remote_url = urls[0]
-        engine = "dashscope"
+    remote_url = call_qwen_image(config, input_path, prompt, size)
     remote = requests.get(remote_url, timeout=180)
     remote.raise_for_status()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -803,8 +752,8 @@ def clean_image(
         "output": str(output_path.resolve()),
         "remote_url": remote_url,
         "size": list(original_size),
-        "model": config.get("WAN_IMAGE_MODEL", "wan2.7-image"),
-        "engine": engine,
+        "model": config.get("QWEN_IMAGE_MODEL", "qwen-image-2.1-pro"),
+        "engine": "qwen-compatible",
     }
 
 
@@ -965,7 +914,7 @@ def main() -> int:
                     "blogs": blogs.get("total"),
                     "media": media.get("total"),
                     "deepseek_model": config.get("DEEPSEEK_MODEL"),
-                    "wan_model": config.get("WAN_IMAGE_MODEL"),
+                    "qwen_image_model": config.get("QWEN_IMAGE_MODEL"),
                 }
             )
             return 0

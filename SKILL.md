@@ -1,7 +1,7 @@
 ---
 name: stoneart-blog-manager
 description: End-to-end management of Stone Art Sculpture blog posts, project-case images, and media-library images. Use this skill whenever the user asks to create, rewrite, SEO-optimize, inspect, draft, publish, or update a blog on stoneartsculpture.com; replace watermarked images used in blogs or projects; understand media-library images; upload or remove media assets; or research and write a new sculpture blog from product, project, or image inspiration. Also use it when the user asks how to use this skill, requests ready-to-copy prompts, or invokes the skill without a concrete task, and for near-miss requests such as "write a new stone carving article", "clean these project photos", "replace this blog's images", or "fix this article's Google SEO", even when the skill is not named.
-compatibility: Requires Python 3.10+, network access, requests, Pillow, and dashscope for Wan2.7 image editing.
+compatibility: Requires Python 3.10+, network access, requests, and Pillow for Qwen-Image-2.1 editing.
 ---
 
 # Stone Art Blog Manager
@@ -245,10 +245,10 @@ Publish by creating a patch file with `"status": "published"` and running `updat
 
 | Situation | Action |
 |---|---|
-| Clear watermark or stock-site overlay | AI clean with Wan2.7, then visual QA |
+| Clear watermark or stock-site overlay | AI clean with Qwen-Image-2.1, then visual QA |
 | No visible watermark | Keep image; do not call paid model |
 | Subtle mark uncertain after two views | Use DeepSeek vision second opinion; keep if still uncertain |
-| Exposed intimate body parts | Do not send to Wan2.7; source a suitable licensed replacement |
+| Exposed intimate body parts | Do not send to Qwen-Image-2.1; source a suitable licensed replacement |
 | Minors in a sensitive context | Stop and ask the user; do not generate or source replacement |
 | AI output changes subject/composition | Reject, retry once or source a replacement |
 | Replacement has unknown license | Do not use |
