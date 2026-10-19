@@ -126,20 +126,17 @@ class StoneArtClient:
 
     def login(self) -> None:
         payload = {"username": self.username, "password": self.password}
+        challenge = self._fetch_captcha()
+        if challenge.get("enabled"):
+            self._apply_captcha(payload, challenge)
         response = self.session.post(
             f"{self.base_url}/api/admin/session", json=payload, timeout=30
         )
         body = safe_json(response)
-        if response.status_code == 401 and body.get("captcha_required"):
-            captcha = self.session.get(
-                f"{self.base_url}/api/admin/captcha", timeout=30
-            )
-            challenge = safe_json(captcha)
-            match = re.search(r"(\d+)\s*\+\s*(\d+)", challenge.get("question", ""))
-            if not match:
-                raise ApiError(401, "captcha required but could not be parsed", challenge)
-            payload["captcha_answer"] = str(int(match.group(1)) + int(match.group(2)))
-            payload["captcha_token"] = challenge.get("token", "")
+        if response.status_code == 401 and body.get("error") == "invalid captcha":
+            challenge = self._fetch_captcha()
+            if challenge.get("enabled"):
+                self._apply_captcha(payload, challenge)
             response = self.session.post(
                 f"{self.base_url}/api/admin/session", json=payload, timeout=30
             )
@@ -147,6 +144,28 @@ class StoneArtClient:
         if response.status_code >= 400 or not body.get("token"):
             raise ApiError(response.status_code, body.get("error", "login failed"), body)
         self.token = body["token"]
+
+    def _fetch_captcha(self) -> dict[str, Any]:
+        response = self.session.get(
+            f"{self.base_url}/api/admin/captcha", timeout=30
+        )
+        body = safe_json(response)
+        if response.status_code >= 400:
+            raise ApiError(
+                response.status_code,
+                body.get("error", "captcha fetch failed"),
+                body,
+            )
+        return body
+
+    def _apply_captcha(
+        self, payload: dict[str, Any], challenge: dict[str, Any]
+    ) -> None:
+        match = re.search(r"(\d+)\s*\+\s*(\d+)", challenge.get("question", ""))
+        if not match:
+            raise ApiError(401, "captcha required but could not be parsed", challenge)
+        payload["captcha_answer"] = str(int(match.group(1)) + int(match.group(2)))
+        payload["captcha_token"] = challenge.get("token", "")
 
     def request(
         self,
