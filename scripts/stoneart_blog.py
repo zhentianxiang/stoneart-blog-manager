@@ -103,7 +103,15 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, str]:
             values[key] = os.environ[key]
     for key, value in os.environ.items():
         if key.startswith(
-            ("STONEART_", "ALIYUN_", "DEEPSEEK_", "WAN_", "FEISHU_", "DEFAULT_AUTHOR_")
+            (
+                "STONEART_",
+                "ALIYUN_",
+                "DEEPSEEK_",
+                "WAN_",
+                "LOCAL_IMAGE_",
+                "FEISHU_",
+                "DEFAULT_AUTHOR_",
+            )
         ):
             values[key] = value
     return values
@@ -964,12 +972,140 @@ def collect_image_urls(value: Any) -> list[str]:
     return urls
 
 
+LOCAL_SIZE_RE = re.compile(r"^\d{3,4}x\d{3,4}$")
+
+
+def local_image_enabled(config: dict[str, str]) -> bool:
+    return str(config.get("LOCAL_IMAGE_ENABLED", "true")).strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def local_image_base_url(config: dict[str, str]) -> str:
+    base = config.get("LOCAL_IMAGE_BASE_URL", "").strip()
+    return (base or "http://120.10.255.14:7890/v1").rstrip("/")
+
+
+def local_image_headers(config: dict[str, str]) -> dict[str, str]:
+    api_key = config.get("LOCAL_IMAGE_API_KEY", "").strip()
+    return {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+
+def local_edit_size(input_path: Path, requested_size: str) -> str:
+    requested_size = requested_size.strip()
+    if LOCAL_SIZE_RE.fullmatch(requested_size):
+        return requested_size
+    try:
+        from PIL import Image
+
+        with Image.open(input_path) as image:
+            width, height = image.size
+    except Exception:
+        return "auto"
+    if min(width, height) < 256:
+        return "auto"
+    scale = min(1.0, 2048 / max(width, height))
+    width = max(256, int(width * scale + 8) // 16 * 16)
+    height = max(256, int(height * scale + 8) // 16 * 16)
+    return f"{width}x{height}"
+
+
+def check_local_image_health(config: dict[str, str]) -> None:
+    base = local_image_base_url(config)
+    health_url = config.get("LOCAL_IMAGE_HEALTH_URL", "").strip()
+    if not health_url:
+        root = base[:-3] if base.endswith("/v1") else base
+        health_url = f"{root}/health"
+    timeout = float(config.get("LOCAL_IMAGE_HEALTH_TIMEOUT", "5"))
+    try:
+        response = requests.get(
+            health_url, headers=local_image_headers(config), timeout=timeout
+        )
+        if response.status_code == 404:
+            # Some OpenAI-compatible servers expose only /v1/models.
+            response = requests.get(
+                f"{base}/models",
+                headers=local_image_headers(config),
+                timeout=timeout,
+            )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"local image health check failed: {exc}") from exc
+    if response.status_code >= 400:
+        raise RuntimeError(
+            f"local image health check returned HTTP {response.status_code}"
+        )
+    body = safe_json(response)
+    online = body.get("workers_online")
+    if online is not None:
+        try:
+            online_count = int(online)
+        except (TypeError, ValueError):
+            online_count = 0
+        if online_count < 1:
+            raise RuntimeError("local image server has no online workers")
+    status = str(body.get("status", "ok")).strip().lower()
+    if status not in {"ok", "healthy", "ready"}:
+        raise RuntimeError(f"local image server is not ready: {status}")
+
+
+def call_local_image_edit(
+    config: dict[str, str], input_path: Path, prompt: str, size: str
+) -> str:
+    if not local_image_enabled(config):
+        raise RuntimeError("local image editing is disabled")
+    base = local_image_base_url(config)
+    check_local_image_health(config)
+    model = config.get("LOCAL_IMAGE_MODEL", "").strip() or "qwen-image-2.1"
+    local_size = local_edit_size(input_path, size)
+    data = {
+        "model": model,
+        "prompt": prompt,
+        "n": "1",
+        "size": local_size,
+        "quality": config.get("LOCAL_IMAGE_QUALITY", "auto"),
+        "response_format": "url",
+        "output_format": "jpeg",
+    }
+    steps = config.get("LOCAL_IMAGE_STEPS", "").strip()
+    if steps:
+        data["steps"] = steps
+    mime = mimetypes.guess_type(input_path.name)[0] or "image/jpeg"
+    timeout = float(config.get("LOCAL_IMAGE_TIMEOUT", "960"))
+    try:
+        with input_path.open("rb") as handle:
+            response = requests.post(
+                f"{base}/images/edits",
+                headers=local_image_headers(config),
+                data=data,
+                files={"image": (input_path.name, handle, mime)},
+                timeout=timeout,
+            )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"local image edit request failed: {exc}") from exc
+    body = safe_json(response)
+    if response.status_code >= 400:
+        message = body.get("error") or body.get("detail") or "Local Qwen image edit failed"
+        if isinstance(message, dict):
+            message = message.get("message") or json.dumps(message, ensure_ascii=False)
+        raise ApiError(response.status_code, str(message), body)
+    urls = collect_image_urls(body)
+    if not urls:
+        raise ApiError(500, "Local Qwen response contained no image URL", body)
+    return urls[0]
+
+
 def call_wan_compatible(
     config: dict[str, str], input_path: Path, prompt: str, size: str
 ) -> str:
-    base = config["ALIYUN_WAN_COMPATIBLE_BASE_URL"].rstrip("/")
+    base = config.get("ALIYUN_WAN_COMPATIBLE_BASE_URL", "").rstrip("/")
+    api_key = config.get("ALIYUN_DASHSCOPE_API_KEY", "")
+    if not base or not api_key:
+        raise RuntimeError("Aliyun Wan compatible endpoint or API key is missing")
     headers = {
-        "Authorization": f"Bearer {config['ALIYUN_DASHSCOPE_API_KEY']}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     payload = {
@@ -1002,35 +1138,25 @@ def call_wan_compatible(
     return urls[0]
 
 
-def clean_image(
-    config: dict[str, str],
-    input_path: Path,
-    output_path: Path,
-    prompt: str,
-    size: str,
-) -> dict[str, Any]:
+def call_wan_edit(
+    config: dict[str, str], input_path: Path, prompt: str, size: str
+) -> tuple[str, str]:
     try:
-        from PIL import Image, ImageOps
-    except ImportError as exc:
-        raise RuntimeError("clean-image requires Pillow; install requirements.txt") from exc
-
-    with Image.open(input_path) as source:
-        original = ImageOps.exif_transpose(source).convert("RGB")
-        original_size = original.size
-    engine = "compatible"
-    try:
-        remote_url = call_wan_compatible(config, input_path, prompt, size)
-    except Exception:
+        return call_wan_compatible(config, input_path, prompt, size), "wan-compatible"
+    except Exception as compatible_error:
         try:
             import dashscope
             from dashscope.aigc.image_generation import ImageGeneration
             from dashscope.api_entities.dashscope_response import Message
         except ImportError:
-            raise
-        dashscope.base_http_api_url = config["ALIYUN_WAN_DASHSCOPE_BASE_URL"]
+            raise compatible_error
+        base_url = config.get("ALIYUN_WAN_DASHSCOPE_BASE_URL", "").rstrip("/")
+        if not base_url:
+            raise compatible_error
+        dashscope.base_http_api_url = base_url
         response = ImageGeneration.call(
             model=config.get("WAN_IMAGE_MODEL", "wan2.7-image"),
-            api_key=config["ALIYUN_DASHSCOPE_API_KEY"],
+            api_key=config.get("ALIYUN_DASHSCOPE_API_KEY", ""),
             messages=[
                 Message(
                     role="user",
@@ -1048,8 +1174,90 @@ def clean_image(
         urls = get_wan_result_urls(response)
         if not urls:
             raise RuntimeError("Wan2.7 returned no image URL")
-        remote_url = urls[0]
-        engine = "dashscope"
+        return urls[0], "wan-dashscope"
+
+
+def edit_image_with_fallback(
+    config: dict[str, str], input_path: Path, prompt: str, size: str
+) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    if local_image_enabled(config):
+        local_model = config.get("LOCAL_IMAGE_MODEL", "").strip() or "qwen-image-2.1"
+        try:
+            remote_url = call_local_image_edit(config, input_path, prompt, size)
+            attempts.append(
+                {
+                    "provider": "local-qwen",
+                    "model": local_model,
+                    "status": "succeeded",
+                }
+            )
+            return {
+                "remote_url": remote_url,
+                "provider": "local-qwen",
+                "model": local_model,
+                "engine": "local-qwen",
+                "attempts": attempts,
+            }
+        except Exception as exc:
+            attempts.append(
+                {
+                    "provider": "local-qwen",
+                    "model": local_model,
+                    "status": "failed",
+                    "error": str(exc),
+                }
+            )
+    wan_model = config.get("WAN_IMAGE_MODEL", "wan2.7-image")
+    try:
+        remote_url, engine = call_wan_edit(config, input_path, prompt, size)
+    except Exception as exc:
+        attempts.append(
+            {
+                "provider": "wan2.7",
+                "model": wan_model,
+                "status": "failed",
+                "error": str(exc),
+            }
+        )
+        details = "; ".join(
+            f"{item['provider']}: {item.get('error', 'failed')}" for item in attempts
+        )
+        raise RuntimeError(f"all image edit providers failed: {details}") from exc
+    attempts.append(
+        {
+            "provider": "wan2.7",
+            "model": wan_model,
+            "status": "succeeded",
+            "engine": engine,
+        }
+    )
+    return {
+        "remote_url": remote_url,
+        "provider": "wan2.7",
+        "model": wan_model,
+        "engine": engine,
+        "attempts": attempts,
+    }
+
+
+def clean_image(
+    config: dict[str, str],
+    input_path: Path,
+    output_path: Path,
+    prompt: str,
+    size: str,
+) -> dict[str, Any]:
+    try:
+        from PIL import Image, ImageOps
+    except ImportError as exc:
+        raise RuntimeError("clean-image requires Pillow; install requirements.txt") from exc
+
+    with Image.open(input_path) as source:
+        original = ImageOps.exif_transpose(source).convert("RGB")
+        original_size = original.size
+    edit = edit_image_with_fallback(config, input_path, prompt, size)
+    remote_url = edit["remote_url"]
     remote = requests.get(remote_url, timeout=180)
     remote.raise_for_status()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1066,8 +1274,10 @@ def clean_image(
         "output": str(output_path.resolve()),
         "remote_url": remote_url,
         "size": list(original_size),
-        "model": config.get("WAN_IMAGE_MODEL", "wan2.7-image"),
-        "engine": engine,
+        "model": edit["model"],
+        "engine": edit["engine"],
+        "provider": edit["provider"],
+        "attempts": edit["attempts"],
     }
 
 

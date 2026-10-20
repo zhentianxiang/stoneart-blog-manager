@@ -6,7 +6,7 @@
 2. Image inspection
 3. Watermark classifications
 4. Sensitive-content rule
-5. Wan2.7 cleaning
+5. Local Qwen / Wan2.7 cleaning
 6. Web replacement sourcing
 7. Upload and article update
 8. Visual QA
@@ -64,7 +64,7 @@ Replace only `foreign` and confirmed unwanted `uncertain` watermarks. Do not run
 
 ## 4. Sensitive-Content Rule
 
-Do not send images containing exposed intimate body parts to Wan2.7 or another generative editor. This includes explicit nudity or close-ups of genitalia, buttocks, or breasts.
+Do not send images containing exposed intimate body parts to the local Qwen editor, Wan2.7, or another generative editor. This includes explicit nudity or close-ups of genitalia, buttocks, or breasts.
 
 For classical sculpture:
 
@@ -74,7 +74,7 @@ For classical sculpture:
 - Do not use random search thumbnails or images with unclear ownership.
 - If minors are involved in a sensitive context, stop and ask the user.
 
-## 5. Wan2.7 Cleaning
+## 5. Local Qwen-Image-2.1 Cleaning with Wan2.7 Fallback
 
 Use the default preservation prompt:
 
@@ -85,6 +85,8 @@ python scripts/stoneart_blog.py clean-image \
 ```
 
 The prompt should remove only watermark/logo/text overlays. It should preserve the sculpture, background, lighting, colors, perspective, crop, and aspect ratio. Do not ask the model to redesign the scene unless the user explicitly requests that.
+
+`clean-image` calls `LOCAL_IMAGE_BASE_URL` first. If the health check fails, the request times out, or the local model returns no image, it retries the same edit through the configured Wan2.7 compatible endpoint and then the DashScope SDK. Inspect the returned `provider` and `attempts` fields when a run is slower than expected.
 
 If the result has any of these defects, reject it:
 
