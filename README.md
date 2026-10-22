@@ -14,6 +14,7 @@ Codex skill for managing Stone Art Sculpture blogs, project images, media-librar
 - Replace sensitive images with licensed no-watermark sources
 - Upload replacements to the Stone Art media library
 - Update cover, body image URLs, and alt text
+- Preserve changed published URLs with permanent redirects and verify old-to-new link health
 - Back up articles before updates
 - Keep all new content as drafts by default
 - Send signed Feishu cards for blog creation, publication, updates, and image replacements

@@ -189,4 +189,5 @@ Do not choose a topic first and then force unrelated images into it. The images 
 - No `[VERIFY]` remains.
 - SEO title and meta description meet length targets.
 - Internal links point to relevant pages, not the homepage by default.
+- Any changed published slug has a verified permanent redirect from the old URL.
 - Draft is saved before publishing.

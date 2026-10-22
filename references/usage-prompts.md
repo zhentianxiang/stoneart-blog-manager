@@ -69,6 +69,8 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 - 有敏感内容的图片不发给生成模型
 - 新图片先上传素材库
 - 替换正文和封面 URL，并优化图片 alt
+- 如果修改已发布文章的 slug，记录旧 URL，部署后用 check-redirect 验证永久 301
+- 把站内仍指向旧 URL 的内部链接更新为新地址
 - 修改前备份，先 dry-run
 - 保持原发布状态
 - 完成后验证公开页面

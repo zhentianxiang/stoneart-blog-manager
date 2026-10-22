@@ -279,6 +279,16 @@ The update command fetches the current article, merges only the supplied fields,
 
 After saving, fetch the article again and verify title, slug, status, author, cover image, body HTML, SEO fields, and public URL.
 
+If a published blog or project slug changed, verify the old URL redirect after deployment:
+
+```bash
+python scripts/stoneart_blog.py check-redirect \
+  --old-url /blog/<old-slug>/ \
+  --new-url /blog/<new-slug>/
+```
+
+The old URL must return permanent `301` or `308`, the new URL must return `200`, and internal links must be updated. Use `/projects/` paths when checking a project case. The site records published slug changes automatically, but the live redirect check is still required.
+
 ### 7. Publish only on explicit request
 
 Publish by creating a patch file with `"status": "published"` and running `update-blog`. Then verify the public URL and HTTP 200 response.
@@ -340,6 +350,7 @@ Do not suppress notifications for normal publishing or editorial updates unless 
 - H2/H3 structure supports scanning and the generated table of contents.
 - Specific, verifiable details replace generic claims.
 - Include product/project internal links only where useful.
+- After a slug change, verify the old URL permanently redirects to the new URL and update internal links.
 - Add FAQ only when real questions remain.
 - Add descriptive image alt text; never keyword-stuff alt text.
 - Avoid unsupported superlatives, fake statistics, fake dates, and invented customer stories.

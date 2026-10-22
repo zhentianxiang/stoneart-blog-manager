@@ -96,6 +96,7 @@ Use the bundled CLI for deterministic operations:
 
 ```bash
 python scripts/stoneart_blog.py check
+python scripts/stoneart_blog.py check-redirect --old-url /blog/old-slug/ --new-url /blog/new-slug/
 python scripts/stoneart_blog.py content-inventory --output work/content-inventory.json
 python scripts/stoneart_blog.py topic-check --title "Marble Fountain Size Guide" --slug marble-fountain-size-guide --semantic
 python scripts/stoneart_blog.py find-blog --slug example
@@ -111,6 +112,8 @@ python scripts/stoneart_blog.py test-feishu
 ```
 
 Add `--dry-run` to `create-blog` or `update-blog` to inspect the exact payload and changed fields without writing. Use `--help` on any command for the full argument list.
+
+`check-redirect` requires a permanent `301` or `308`, verifies the destination path and query string, and confirms the new URL is reachable.
 
 ## Feishu Blog Notifications
 

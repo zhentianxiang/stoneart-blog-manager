@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
@@ -366,6 +366,48 @@ def blog_admin_url(config: dict[str, str]) -> str:
 
 def blog_public_url(config: dict[str, str], slug: str) -> str:
     return config["STONEART_BASE_URL"].rstrip("/") + f"/blog/{slug}/"
+
+
+def redirect_targets_match(location: str, expected_url: str) -> bool:
+    actual = urlsplit(location)
+    expected = urlsplit(expected_url)
+    return (
+        actual.scheme in {"http", "https"}
+        and actual.netloc == expected.netloc
+        and actual.path.rstrip("/") == expected.path.rstrip("/")
+        and actual.query == expected.query
+    )
+
+
+def check_redirect(
+    config: dict[str, str], old_url: str, new_url: str
+) -> dict[str, Any]:
+    site = config["STONEART_BASE_URL"].rstrip("/") + "/"
+    old_absolute = urljoin(site, old_url)
+    new_absolute = urljoin(site, new_url)
+    response = requests.get(old_absolute, allow_redirects=False, timeout=30)
+    location = response.headers.get("Location", "")
+    resolved_location = urljoin(old_absolute, location) if location else ""
+    new_response = requests.get(new_absolute, allow_redirects=True, timeout=30)
+    permanent = response.status_code in {301, 308}
+    matches = bool(
+        resolved_location
+        and redirect_targets_match(resolved_location, new_absolute)
+    )
+    destination_ok = new_response.status_code < 400
+    return {
+        "ok": permanent and matches and destination_ok,
+        "old_url": old_absolute,
+        "old_status": response.status_code,
+        "location": resolved_location,
+        "expected_location": new_absolute,
+        "permanent_redirect": permanent,
+        "location_matches": matches,
+        "new_url": new_absolute,
+        "new_status": new_response.status_code,
+        "new_final_url": new_response.url,
+        "destination_ok": destination_ok,
+    }
 
 
 def notification_time(config: dict[str, str]) -> str:
@@ -1457,6 +1499,14 @@ def parser() -> argparse.ArgumentParser:
 
     sub.add_parser("check", help="Validate login, blog access, and media access")
 
+    redirect = sub.add_parser(
+        "check-redirect",
+        help="Verify a permanent old-to-new content URL redirect",
+    )
+    redirect.add_argument("--old-url", required=True)
+    redirect.add_argument("--new-url", required=True)
+    redirect.add_argument("--output", default="")
+
     list_blogs = sub.add_parser("list-blogs")
     list_blogs.add_argument("--query", default="")
     list_blogs.add_argument("--status", choices=["", "draft", "published"], default="")
@@ -1614,6 +1664,11 @@ def main() -> int:
                 }
             )
             return 0
+
+        if args.command == "check-redirect":
+            result = check_redirect(config, args.old_url, args.new_url)
+            output_json(result, args.output)
+            return 0 if result["ok"] else 2
 
         if args.command == "vision":
             image = Path(args.image).expanduser()

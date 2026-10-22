@@ -62,6 +62,8 @@ Do not mix three intents into one title. If two intents are valuable, make two a
 - Include FAQ only for genuine remaining questions.
 - Add descriptive internal links to relevant products, categories, projects, or articles.
 - Add descriptive external citations only when they improve trust.
+- When changing a published slug, preserve the old URL with a permanent `301` and update every internal link to the new URL.
+- Confirm the new URL is in the sitemap and request Search Console reindexing for important pages.
 - Avoid false urgency, fabricated statistics, fake testimonials, and invented expertise.
 - Avoid repetitive AI phrases such as "in today's fast-paced world", "comprehensive guide" used without substance, and "beyond aesthetics".
 - Use inclusive, plain English. Explain industry terms when first used.
