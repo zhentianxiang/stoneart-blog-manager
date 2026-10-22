@@ -1,7 +1,7 @@
 ---
 name: stoneart-blog-manager
 description: End-to-end management of Stone Art Sculpture blog posts, project-case images, and media-library images. Use this skill whenever the user asks to create, rewrite, SEO-optimize, inspect, draft, publish, or update a blog on stoneartsculpture.com; replace watermarked images used in blogs or projects; understand media-library images; upload or remove media assets; or research and write a new sculpture blog from product, project, or image inspiration. Also use it when the user asks how to use this skill, requests ready-to-copy prompts, or invokes the skill without a concrete task, and for near-miss requests such as "write a new stone carving article", "clean these project photos", "replace this blog's images", or "fix this article's Google SEO", even when the skill is not named.
-compatibility: Requires Python 3.10+, network access, requests, and Pillow. The default local Qwen-Image-2.1 editor needs no cloud key; dashscope is optional and only used for the Wan2.7 fallback.
+compatibility: Requires Python 3.10+, network access, requests, and Pillow. Image understanding uses current Codex vision first, local Qwen3-VL-30B-A3B-Instruct second, and DeepSeek last. The local Qwen-Image-2.1 editor needs no cloud key; dashscope is optional for the Wan2.7 fallback.
 ---
 
 # Stone Art Blog Manager
@@ -39,7 +39,26 @@ LOCAL_IMAGE_STEPS=40
 
 Set `LOCAL_IMAGE_ENABLED=false` to send every edit directly to Wan2.7. The `clean-image` result reports `provider` and `attempts`, so the fallback reason stays visible.
 
-`DEEPSEEK_MODEL=deepseek-flash` maps to the current DeepSeek V4.1 Flash model exposed by the configured API. It supports text and image input.
+Image understanding uses this provider order:
+
+```dotenv
+LOCAL_VISION_ENABLED=true
+LOCAL_VISION_BASE_URL=http://120.10.255.14:7893/v1
+LOCAL_VISION_MODEL=Qwen3-VL-30B-A3B-Instruct
+LOCAL_VISION_API_KEY=
+LOCAL_VISION_TIMEOUT=180
+LOCAL_VISION_MAX_TOKENS=4000
+```
+
+1. Use the current Codex conversation's native image capability first. It has the article context, user corrections, and final visual judgment.
+2. When Codex cannot access or reliably interpret an image, run `vision` or `vision-batch`. The CLI calls the local Qwen3-VL model first.
+3. Use DeepSeek vision only when the local model is disabled, unavailable, times out, or returns no usable result.
+
+The returned `vision_provider` and `vision_attempts` fields make any fallback visible. DeepSeek output remains supporting evidence; Codex still makes the final editorial decision.
+
+The local Qwen3-VL deployment accepts one image per request. `vision-batch` keeps its multi-image interface but automatically processes images one at a time while local vision is enabled, so a multi-image request does not bypass the local provider.
+
+`DEEPSEEK_MODEL=deepseek-flash` maps to the current DeepSeek V4.1 Flash model exposed by the configured API. It supports text and image input, with image input now serving as the final fallback.
 
 Feishu blog notifications use:
 
@@ -86,13 +105,13 @@ Read only the references needed for the task:
 
 DeepSeek Chat rejects history where an assistant `tool_calls` message is not followed immediately by one tool result per `tool_call_id`. Some CC Switch versions mishandle parallel Codex tool calls or interleaved commentary messages, producing HTTP 400 errors such as "insufficient tool messages following tool_calls message".
 
-When using `deepseek-flash` through CC Switch:
+When the current Codex provider itself is `deepseek-flash` through CC Switch:
 
 - Prefer one bundled Python command over multiple Codex tool calls.
-- Inspect multiple images with `vision-batch`, not parallel `view_image` calls.
+- Inspect multiple images with `vision-batch`, not parallel `view_image` calls, because that provider mishandles some parallel tool-call histories.
 - Keep a single assistant turn to at most 1-3 tool calls and let all results return before writing commentary.
 - Do not put assistant commentary messages between outputs belonging to one parallel tool-call batch.
-- For heavy image QA or large batches, prefer the official Codex provider; use DeepSeek for text, SEO, and small image batches.
+- For heavy image QA or large batches, prefer the current Codex vision. If its provider itself is DeepSeek through CC Switch, use `vision-batch` so the bundled command can try local Qwen3-VL first.
 - If this error already occurred in a thread, start a new conversation. Retrying inside the failed thread keeps the invalid tool-call history and will fail again.
 
 Batch image inspection:
@@ -138,7 +157,7 @@ Read `references/image-policy.md` before classifying images.
 
 1. Open every downloaded image with Codex's `view_image`.
 2. Record subject, scene, visible watermark text/location, and sensitive-content status.
-3. Optionally ask DeepSeek for a second structured description:
+3. If Codex cannot inspect an image reliably, run the bundled structured vision command. It tries local Qwen3-VL before DeepSeek:
 
 ```bash
 python scripts/stoneart_blog.py vision \
@@ -306,7 +325,7 @@ Do not suppress notifications for normal publishing or editorial updates unless 
 |---|---|
 | Clear watermark or stock-site overlay | AI clean with local Qwen-Image-2.1 (Wan2.7 fallback), then visual QA |
 | No visible watermark | Keep image; do not call paid model |
-| Subtle mark uncertain after two views | Use DeepSeek vision second opinion; keep if still uncertain |
+| Subtle mark uncertain after two views | Use local Qwen3-VL for a structured second view; use DeepSeek only if the local model fails |
 | Exposed intimate body parts | Do not send to either image editor; source a suitable licensed replacement |
 | Minors in a sensitive context | Stop and ask the user; do not generate or source replacement |
 | AI output changes subject/composition | Reject, retry once or source a replacement |

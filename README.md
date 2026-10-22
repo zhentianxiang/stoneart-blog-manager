@@ -9,7 +9,7 @@ Codex skill for managing Stone Art Sculpture blogs, project images, media-librar
 - Prevent duplicate topics with deterministic and DeepSeek semantic checks
 - Prefer unused media and detect repeated images across blogs/projects
 - Download and inspect article images locally
-- Detect watermarks with Codex and optional DeepSeek vision
+- Detect watermarks with current Codex vision first, local Qwen3-VL second, and DeepSeek as the final fallback
 - Clean watermarked images with local Qwen-Image-2.1, falling back to Alibaba Wan2.7 when the local service is unavailable
 - Replace sensitive images with licensed no-watermark sources
 - Upload replacements to the Stone Art media library

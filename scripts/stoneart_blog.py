@@ -109,6 +109,7 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, str]:
                 "DEEPSEEK_",
                 "WAN_",
                 "LOCAL_IMAGE_",
+                "LOCAL_VISION_",
                 "FEISHU_",
                 "DEFAULT_AUTHOR_",
             )
@@ -855,6 +856,148 @@ def call_deepseek(
     return str(content)
 
 
+def local_vision_enabled(config: dict[str, str]) -> bool:
+    return str(config.get("LOCAL_VISION_ENABLED", "true")).strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def call_local_vision(
+    config: dict[str, str],
+    messages: list[dict[str, Any]],
+    *,
+    response_format: dict[str, str] | None = None,
+    temperature: float = 0.2,
+    max_tokens: int = 4000,
+    timeout: int = 180,
+) -> str:
+    if not local_vision_enabled(config):
+        raise RuntimeError("local Qwen vision is disabled")
+    base = (
+        config.get("LOCAL_VISION_BASE_URL", "").strip()
+        or "http://120.10.255.14:7893/v1"
+    ).rstrip("/")
+    api_key = config.get("LOCAL_VISION_API_KEY", "").strip()
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    body: dict[str, Any] = {
+        "model": (
+            config.get("LOCAL_VISION_MODEL", "").strip()
+            or "Qwen3-VL-30B-A3B-Instruct"
+        ),
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": int(config.get("LOCAL_VISION_MAX_TOKENS", max_tokens)),
+    }
+    if response_format:
+        body["response_format"] = response_format
+    try:
+        response = requests.post(
+            f"{base}/chat/completions",
+            headers=headers,
+            json=body,
+            timeout=float(config.get("LOCAL_VISION_TIMEOUT", timeout)),
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"local Qwen vision request failed: {exc}") from exc
+    payload = safe_json(response)
+    if response.status_code >= 400:
+        raise ApiError(
+            response.status_code,
+            payload.get("error", "Local Qwen vision request failed"),
+            payload,
+        )
+    choices = payload.get("choices") or []
+    if not choices:
+        raise ApiError(500, "Local Qwen vision returned no choices", payload)
+    content = choices[0].get("message", {}).get("content", "")
+    if isinstance(content, list):
+        content = "".join(
+            item.get("text", "") for item in content if isinstance(item, dict)
+        )
+    if not str(content).strip():
+        raise ApiError(500, "Local Qwen vision returned empty content", payload)
+    return str(content)
+
+
+def call_vision_with_fallback(
+    config: dict[str, str],
+    messages: list[dict[str, Any]],
+    *,
+    response_format: dict[str, str] | None = None,
+    temperature: float = 0.2,
+    max_tokens: int = 4000,
+    timeout: int = 240,
+) -> tuple[str, dict[str, Any]]:
+    attempts: list[dict[str, Any]] = []
+    if local_vision_enabled(config):
+        model = (
+            config.get("LOCAL_VISION_MODEL", "").strip()
+            or "Qwen3-VL-30B-A3B-Instruct"
+        )
+        try:
+            content = call_local_vision(
+                config,
+                messages,
+                response_format=response_format,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+            )
+            attempts.append(
+                {"provider": "local-qwen-vl", "model": model, "status": "succeeded"}
+            )
+            return content, {
+                "provider": "local-qwen-vl",
+                "model": model,
+                "attempts": attempts,
+            }
+        except Exception as exc:
+            attempts.append(
+                {
+                    "provider": "local-qwen-vl",
+                    "model": model,
+                    "status": "failed",
+                    "error": str(exc),
+                }
+            )
+    deepseek_model = config.get("DEEPSEEK_MODEL", "deepseek-flash")
+    try:
+        content = call_deepseek(
+            config,
+            messages,
+            response_format=response_format,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+        )
+    except Exception as exc:
+        attempts.append(
+            {
+                "provider": "deepseek",
+                "model": deepseek_model,
+                "status": "failed",
+                "error": str(exc),
+            }
+        )
+        details = "; ".join(
+            f"{item['provider']}: {item.get('error', 'failed')}" for item in attempts
+        )
+        raise RuntimeError(f"all vision providers failed: {details}") from exc
+    attempts.append(
+        {"provider": "deepseek", "model": deepseek_model, "status": "succeeded"}
+    )
+    return content, {
+        "provider": "deepseek",
+        "model": deepseek_model,
+        "attempts": attempts,
+    }
+
+
 def parse_json_model_output(value: str) -> Any:
     cleaned = value.strip()
     if cleaned.startswith("```"):
@@ -882,8 +1025,11 @@ def vision_batch(
     batch_size: int,
     prompt: str,
 ) -> dict[str, Any]:
-    batch_size = max(1, min(batch_size, 6))
+    # The local Qwen3-VL deployment accepts one image per request. Keep the
+    # vision-batch interface while processing images one at a time.
+    batch_size = 1 if local_vision_enabled(config) else max(1, min(batch_size, 6))
     results: list[dict[str, Any]] = []
+    vision_runs: list[dict[str, Any]] = []
     for start in range(0, len(paths), batch_size):
         chunk = paths[start : start + batch_size]
         content: list[dict[str, Any]] = []
@@ -909,7 +1055,7 @@ def vision_batch(
                 "watermark_notes, sensitive_content, suggested_alt_text, and replacement_risks.",
             }
         )
-        raw = call_deepseek(
+        raw, vision_info = call_vision_with_fallback(
             config,
             [
                 {
@@ -923,17 +1069,27 @@ def vision_batch(
             ],
             response_format={"type": "json_object"},
         )
+        vision_runs.append(vision_info)
         parsed = parse_json_model_output(raw)
         batch_results = parsed.get("images") if isinstance(parsed, dict) else None
         if isinstance(batch_results, list):
             for index, item in enumerate(batch_results):
                 if isinstance(item, dict):
+                    item["index"] = start + index + 1
                     if index < len(chunk):
                         item.setdefault("local_path", str(chunk[index].resolve()))
                     results.append(item)
         else:
             results.append({"raw": parsed})
-    return {"image_count": len(paths), "images": results}
+    return {
+        "image_count": len(paths),
+        "images": results,
+        "vision_provider": vision_runs[-1]["provider"] if vision_runs else None,
+        "vision_model": vision_runs[-1]["model"] if vision_runs else None,
+        "vision_attempts": [
+            attempt for run in vision_runs for attempt in run.get("attempts", [])
+        ],
+    }
 
 
 def get_wan_result_urls(response: Any) -> list[str]:
@@ -1450,6 +1606,10 @@ def main() -> int:
                     "blogs": blogs.get("total"),
                     "media": media.get("total"),
                     "deepseek_model": config.get("DEEPSEEK_MODEL"),
+                    "local_vision_enabled": local_vision_enabled(config),
+                    "local_vision_model": config.get(
+                        "LOCAL_VISION_MODEL", "Qwen3-VL-30B-A3B-Instruct"
+                    ),
                     "wan_model": config.get("WAN_IMAGE_MODEL"),
                 }
             )
@@ -1463,7 +1623,7 @@ def main() -> int:
                 "watermark_notes, sensitive_content, suggested_alt_text, and replacement_risks. "
                 "Do not guess beyond the image."
             )
-            raw = call_deepseek(
+            raw, vision_info = call_vision_with_fallback(
                 config,
                 [
                     {
@@ -1481,6 +1641,10 @@ def main() -> int:
                 response_format={"type": "json_object"},
             )
             result = parse_json_model_output(raw)
+            if isinstance(result, dict):
+                result.setdefault("vision_provider", vision_info["provider"])
+                result.setdefault("vision_model", vision_info["model"])
+                result.setdefault("vision_attempts", vision_info["attempts"])
             output_json(result, args.output)
             return 0
 

@@ -39,9 +39,17 @@ Inspect every image with Codex's `view_image`. Record:
 - Exposed intimate body parts or other sensitive content
 - Existing alt text quality
 
-When running through CC Switch with `deepseek-flash`, use `vision-batch` for 3 images at a time instead of parallel `view_image` calls. This avoids a known DeepSeek tool-call history error.
+Use this provider order:
 
-Optionally run DeepSeek vision for a structured second opinion:
+1. Current Codex conversation vision.
+2. Local `Qwen3-VL-30B-A3B-Instruct` through the bundled `vision` or `vision-batch` command.
+3. DeepSeek vision only when the local model is disabled, unavailable, times out, or returns no usable result.
+
+The local endpoint accepts one image per request. `vision-batch` automatically processes images one by one while local vision is enabled.
+
+When the current Codex provider itself is `deepseek-flash` through CC Switch, use `vision-batch` for up to 3 images at a time instead of parallel `view_image` calls. This avoids a known DeepSeek tool-call history error.
+
+If Codex cannot inspect reliably, run a structured second opinion; the CLI tries local Qwen3-VL first and DeepSeek second:
 
 ```bash
 python scripts/stoneart_blog.py vision \
@@ -49,7 +57,7 @@ python scripts/stoneart_blog.py vision \
   --output work/<slug>/source-vision.json
 ```
 
-Codex vision remains the final visual decision-maker. DeepSeek output is evidence, not permission to skip inspection.
+Codex vision remains the final visual decision-maker. Local Qwen and DeepSeek output are supporting evidence, not permission to skip inspection.
 
 ## 3. Watermark Classifications
 
@@ -58,7 +66,7 @@ Use these labels in the manifest:
 - `none`: no visible watermark; keep image.
 - `foreign`: visible third-party logo, URL, stock watermark, username, or overlay.
 - `stoneart`: only a current Stone Art watermark; usually keep unless the user explicitly requests removal.
-- `uncertain`: possible mark; inspect at full resolution or ask DeepSeek for a second view.
+- `uncertain`: possible mark; inspect at full resolution or ask local Qwen3-VL for a second view, falling back to DeepSeek only if needed.
 
 Replace only `foreign` and confirmed unwanted `uncertain` watermarks. Do not run paid image editing for `none`.
 
