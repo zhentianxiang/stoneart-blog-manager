@@ -23,6 +23,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
+# Windows consoles can default to GBK/CP936. Keep CLI JSON output UTF-8 so
+# subprocess-based automation can decode it reliably.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 SKILL_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = SKILL_DIR / "config.local.env"
 SEO_REFERENCE = SKILL_DIR / "references" / "seo-editor.md"
@@ -1041,7 +1047,14 @@ def call_vision_with_fallback(
 
 
 def parse_json_model_output(value: str) -> Any:
-    cleaned = value.strip()
+    if value is None:
+        raise RuntimeError("model returned empty content")
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("utf-8")
+        except UnicodeDecodeError:
+            value = value.decode("gb18030", errors="replace")
+    cleaned = str(value).strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
         cleaned = re.sub(r"\s*```$", "", cleaned)
