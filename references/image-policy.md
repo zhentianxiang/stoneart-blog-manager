@@ -92,9 +92,18 @@ python scripts/stoneart_blog.py clean-image \
   --output work/<slug>/images/source-clean.jpg
 ```
 
-The prompt should remove only watermark/logo/text overlays. It should preserve the sculpture, background, lighting, colors, perspective, crop, and aspect ratio. Do not ask the model to redesign the scene unless the user explicitly requests that.
+The prompt should remove only watermark/logo/text overlays. It should preserve the
+sculpture, background, lighting, colors, and perspective without distorting the
+subject. Do not ask the model to redesign the scene unless the user explicitly
+requests that.
 
 `clean-image` calls `LOCAL_IMAGE_BASE_URL` first. If the health check fails, the request times out, or the local model returns no image, it retries the same edit through the configured Wan2.7 compatible endpoint and then the DashScope SDK. Inspect the returned `provider` and `attempts` fields when a run is slower than expected.
+
+After editing, `clean-image` normalizes the result to
+`IMAGE_EDIT_OUTPUT_WIDTH × IMAGE_EDIT_OUTPUT_HEIGHT`, which defaults to
+`1024 × 1024`. The default `IMAGE_EDIT_FIT=cover` center-crops after proportional
+scaling. Use `IMAGE_EDIT_FIT=contain` when the complete sculpture must remain visible
+with neutral padding. An image already matching the target size is left untouched.
 
 If the result has any of these defects, reject it:
 
@@ -103,6 +112,7 @@ If the result has any of these defects, reject it:
 - New objects, people, or text added
 - Watermark still visible
 - Background or crop changed unexpectedly
+- Final image size differs from the configured target canvas
 - Blurry repair, warped texture, or obvious repeated patterns
 
 Retry at most twice. If it still fails, use a licensed no-watermark source image.

@@ -78,11 +78,15 @@ STOP_WORDS = {
 DEFAULT_IMAGE_PROMPT = (
     "Only remove visible third-party watermarks, stock-site logos, URLs, usernames, "
     "product codes, and overlaid text. Preserve the sculpture subject, material, "
-    "texture, color, lighting, background, composition, perspective, crop, and "
-    "aspect ratio exactly. Do not add objects, people, text, or decoration. Do not "
-    "redesign or beautify the sculpture. Repair only the marked area so it blends "
-    "naturally with the surrounding texture and light."
+    "texture, color, lighting, background, composition, and perspective. Keep the "
+    "complete sculpture undistorted and inside the requested final canvas. Do not "
+    "add objects, people, text, or decoration. Do not redesign or beautify the "
+    "sculpture. Repair only the marked area so it blends naturally with the "
+    "surrounding texture and light."
 )
+
+DEFAULT_IMAGE_EDIT_WIDTH = 1024
+DEFAULT_IMAGE_EDIT_HEIGHT = 1024
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -118,6 +122,7 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, str]:
                 "LOCAL_VISION_",
                 "FEISHU_",
                 "DEFAULT_AUTHOR_",
+                "IMAGE_EDIT_",
             )
         ):
             values[key] = value
@@ -1186,6 +1191,96 @@ def collect_image_urls(value: Any) -> list[str]:
 LOCAL_SIZE_RE = re.compile(r"^\d{3,4}x\d{3,4}$")
 
 
+def image_edit_output_size(config: dict[str, str]) -> tuple[int, int]:
+    values: list[int] = []
+    for key, default in (
+        ("IMAGE_EDIT_OUTPUT_WIDTH", DEFAULT_IMAGE_EDIT_WIDTH),
+        ("IMAGE_EDIT_OUTPUT_HEIGHT", DEFAULT_IMAGE_EDIT_HEIGHT),
+    ):
+        raw = str(config.get(key, default)).strip()
+        try:
+            value = int(raw)
+        except ValueError as exc:
+            raise ValueError(f"{key} must be an integer, got {raw!r}") from exc
+        if value < 64 or value > 8192:
+            raise ValueError(f"{key} must be between 64 and 8192, got {value}")
+        values.append(value)
+    return values[0], values[1]
+
+
+def image_edit_fit(config: dict[str, str]) -> str:
+    fit = str(config.get("IMAGE_EDIT_FIT", "cover")).strip().lower()
+    if fit not in {"cover", "contain"}:
+        raise ValueError("IMAGE_EDIT_FIT must be 'cover' or 'contain'")
+    return fit
+
+
+def image_edit_prompt(prompt: str, config: dict[str, str]) -> str:
+    width, height = image_edit_output_size(config)
+    fit = image_edit_fit(config)
+    framing = (
+        f"Final file requirement: the finished image will be normalized to exactly "
+        f"{width} x {height} pixels ({'square' if width == height else 'fixed'}). "
+        "Compose a single edited image for that final canvas. "
+        "Keep the sculpture complete, undistorted, and inside the frame with safe "
+        "margins. Do not stretch the subject or change its proportions. "
+        if fit == "cover"
+        else f"Final file requirement: the finished image will be normalized to "
+        f"{width} x {height} pixels. Compose the complete sculpture for that canvas. "
+        "Preserve its proportions, add no invented details, and leave neutral space "
+        "only where needed. "
+    )
+    return f"{prompt.strip()}\n\n{framing}".strip()
+
+
+def normalize_edited_image(path: Path, config: dict[str, str]) -> dict[str, Any]:
+    try:
+        from PIL import Image, ImageOps
+    except ImportError as exc:
+        raise RuntimeError("Pillow is required; install requirements.txt") from exc
+
+    target_size = image_edit_output_size(config)
+    fit = image_edit_fit(config)
+    with Image.open(path) as source:
+        image = ImageOps.exif_transpose(source).convert("RGB")
+        original_size = image.size
+        if original_size == target_size:
+            return {
+                "original_size": list(original_size),
+                "output_size": list(original_size),
+                "target_size": list(target_size),
+                "adjusted": False,
+                "fit": fit,
+            }
+        if fit == "cover":
+            normalized = ImageOps.fit(
+                image,
+                target_size,
+                method=Image.Resampling.LANCZOS,
+                centering=(0.5, 0.5),
+            )
+        else:
+            normalized = ImageOps.pad(
+                image,
+                target_size,
+                method=Image.Resampling.LANCZOS,
+                color=(245, 245, 245),
+                centering=(0.5, 0.5),
+            )
+    save_format = "PNG" if path.suffix.lower() == ".png" else "JPEG"
+    save_options: dict[str, Any] = {"optimize": True}
+    if save_format == "JPEG":
+        save_options.update(quality=95, progressive=True)
+    normalized.save(path, format=save_format, **save_options)
+    return {
+        "original_size": list(original_size),
+        "output_size": list(target_size),
+        "target_size": list(target_size),
+        "adjusted": True,
+        "fit": fit,
+    }
+
+
 def local_image_enabled(config: dict[str, str]) -> bool:
     return str(config.get("LOCAL_IMAGE_ENABLED", "true")).strip().lower() not in {
         "0",
@@ -1467,24 +1562,22 @@ def clean_image(
     with Image.open(input_path) as source:
         original = ImageOps.exif_transpose(source).convert("RGB")
         original_size = original.size
+    prompt = image_edit_prompt(prompt, config)
     edit = edit_image_with_fallback(config, input_path, prompt, size)
     remote_url = edit["remote_url"]
     remote = requests.get(remote_url, timeout=180)
     remote.raise_for_status()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(remote.content)
-    with Image.open(output_path) as result:
-        image = ImageOps.exif_transpose(result).convert("RGB")
-        if image.size != original_size:
-            image = ImageOps.fit(
-                image, original_size, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5)
-            )
-        image.save(output_path, quality=95, optimize=True)
+    image_transform = normalize_edited_image(output_path, config)
     return {
         "input": str(input_path.resolve()),
         "output": str(output_path.resolve()),
         "remote_url": remote_url,
-        "size": list(original_size),
+        "size": image_transform["output_size"],
+        "input_size": list(original_size),
+        "image_transform": image_transform,
+        "prompt": prompt,
         "model": edit["model"],
         "engine": edit["engine"],
         "provider": edit["provider"],

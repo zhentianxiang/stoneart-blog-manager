@@ -11,6 +11,7 @@ Codex skill for managing Stone Art Sculpture blogs, project images, media-librar
 - Download and inspect article images locally
 - Detect watermarks with current Codex vision first, local Qwen3-VL second, and DeepSeek as the final fallback
 - Clean watermarked images with local Qwen-Image-2.1, falling back to Alibaba Wan2.7 when the local service is unavailable
+- Normalize every AI-edited image to a configurable final canvas, defaulting to 1024 × 1024
 - Replace sensitive images with licensed no-watermark sources
 - Upload replacements to the Stone Art media library
 - Update cover, body image URLs, and alt text
@@ -35,6 +36,17 @@ Install Python dependencies:
 ```bash
 python3 -m pip install -r requirements.txt
 ```
+
+On Windows, use Git Bash first. From the skill directory:
+
+```bash
+python --version
+python -m pip install -r requirements.txt
+```
+
+If Git Bash is unavailable, run the same commands in PowerShell with
+`py -3 .\scripts\stoneart_blog.py ...`. PowerShell is the final fallback;
+do not use `cmd.exe`.
 
 Create local configuration:
 

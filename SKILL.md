@@ -1,12 +1,70 @@
 ---
 name: stoneart-blog-manager
 description: End-to-end management of Stone Art Sculpture blog posts, project-case images, and media-library images. Use this skill whenever the user asks to create, rewrite, SEO-optimize, inspect, draft, publish, or update a blog on stoneartsculpture.com; replace watermarked images used in blogs or projects; understand media-library images; upload or remove media assets; or research and write a new sculpture blog from product, project, or image inspiration. Also use it when the user asks how to use this skill, requests ready-to-copy prompts, or invokes the skill without a concrete task, and for near-miss requests such as "write a new stone carving article", "clean these project photos", "replace this blog's images", or "fix this article's Google SEO", even when the skill is not named.
-compatibility: Requires Python 3.10+, network access, requests, and Pillow. Image understanding uses current Codex vision first, local Qwen3-VL-30B-A3B-Instruct second, and DeepSeek last. The local Qwen-Image-2.1 editor needs no cloud key; dashscope is optional for the Wan2.7 fallback.
+compatibility: Requires Python 3.10+, network access, requests, and Pillow. Image understanding uses current Codex vision first, local Qwen3-VL-30B-A3B-Instruct second, and DeepSeek last. The local Qwen-Image-2.1 editor needs no cloud key; dashscope is optional for the Wan2.7 fallback. On Windows, prefer Git Bash for all shell commands and use PowerShell only as the final fallback.
 ---
 
 # Stone Art Blog Manager
 
 Manage the Stone Art Sculpture blog and media library through the production admin API. Treat the live site as production: inspect first, preserve evidence, write drafts by default, and verify every published result.
+
+## Windows Shell Policy
+
+When the operating system is Windows or working paths use Windows drive letters,
+use this order for every shell operation:
+
+1. Prefer Git Bash, with Bash syntax and `/c/...` paths.
+2. Use `python` from the active environment; if it is unavailable, try `py -3`.
+3. If `bash` is not on `PATH`, try `C:\Program Files\Git\bin\bash.exe` before
+   deciding Git Bash is unavailable.
+4. Use PowerShell only when Git Bash is not installed, cannot start, or cannot run
+   the required command. Do not silently switch to `cmd.exe`.
+5. After switching, use PowerShell-native syntax, `C:\...` paths, and `$env:NAME`.
+
+Git Bash verification:
+
+```bash
+cd "/c/path/to/stoneart-blog-manager"
+python --version
+python scripts/stoneart_blog.py check
+```
+
+PowerShell fallback only:
+
+```powershell
+Set-Location "C:\path\to\stoneart-blog-manager"
+$env:PYTHONUTF8 = "1"
+py -3 .\scripts\stoneart_blog.py check
+```
+
+If `bash` is not on `PATH`, invoke Git Bash by its usual absolute path first:
+
+```powershell
+& "C:\Program Files\Git\bin\bash.exe" -lc 'cd "/c/path/to/stoneart-blog-manager" && python scripts/stoneart_blog.py check'
+```
+
+Git Bash environment override:
+
+```bash
+IMAGE_EDIT_OUTPUT_WIDTH=1200 IMAGE_EDIT_OUTPUT_HEIGHT=900 \
+  python scripts/stoneart_blog.py --help
+```
+
+PowerShell environment override:
+
+```powershell
+$env:IMAGE_EDIT_OUTPUT_WIDTH = "1200"
+$env:IMAGE_EDIT_OUTPUT_HEIGHT = "900"
+py -3 .\scripts\stoneart_blog.py --help
+```
+
+If `config.local.env` is absent in PowerShell:
+
+```powershell
+Copy-Item .\config.example.env .\config.local.env
+$identity = "$env:USERDOMAIN\$env:USERNAME"
+icacls .\config.local.env /inheritance:r /grant:r "${identity}:(R,W)"
+```
 
 ## Configuration
 
@@ -15,12 +73,14 @@ Read credentials from `config.local.env` in this skill directory. Environment va
 If `config.local.env` is absent, copy `config.example.env` and fill it. Keep it readable only by the current user:
 
 ```bash
+# Git Bash, macOS, or Linux
 chmod 600 config.local.env
 ```
 
 The default CLI is:
 
 ```bash
+# Git Bash, macOS, or Linux
 cd <skill-directory>
 python scripts/stoneart_blog.py --help
 ```
@@ -35,9 +95,17 @@ LOCAL_IMAGE_API_KEY=
 LOCAL_IMAGE_TIMEOUT=960
 LOCAL_IMAGE_HEALTH_TIMEOUT=5
 LOCAL_IMAGE_STEPS=40
+IMAGE_EDIT_OUTPUT_WIDTH=1024
+IMAGE_EDIT_OUTPUT_HEIGHT=1024
+IMAGE_EDIT_FIT=cover
 ```
 
 Set `LOCAL_IMAGE_ENABLED=false` to send every edit directly to Wan2.7. The `clean-image` result reports `provider` and `attempts`, so the fallback reason stays visible.
+
+Every AI-edited image is normalized to the configured final canvas, defaulting to
+exactly `1024 × 1024`. `cover` preserves proportions and center-crops to fill the
+canvas; `contain` preserves the complete subject and pads the remaining area.
+Images already at the exact target size are not re-encoded.
 
 Image understanding uses this provider order:
 
@@ -177,7 +245,10 @@ python scripts/stoneart_blog.py clean-image \
   --output work/<slug>/images/source-clean.jpg
 ```
 
-Inspect the result with `view_image`. It must keep the same subject, composition, material, lighting, background, and aspect ratio. Retry at most twice if the model adds artifacts, changes the sculpture, or leaves watermark remnants.
+Inspect the result with `view_image`. It must keep the same subject, material,
+lighting, and background, with an undistorted sculpture and the configured final
+canvas size. Retry at most twice if the model adds artifacts, changes the sculpture,
+distorts proportions, or leaves watermark remnants.
 
 If the image contains exposed intimate body parts, do not send it to the image editor. Find a relevant no-watermark replacement from a reputable source such as Wikimedia Commons, museum open-access collections, Unsplash, or the original manufacturer only when reuse is clearly permitted. Record source URL, license, creator, and date in the manifest.
 

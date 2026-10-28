@@ -23,6 +23,17 @@ Show this guide when the user asks:
 
 Present the workflows briefly, include the relevant copyable prompts, and ask which workflow the user wants. Do not start with a paid image edit, production write, upload, or publish.
 
+## Windows execution rule for every prompt
+
+When the user's environment is Windows, every runnable instruction produced by
+this skill must say:
+
+```text
+Windows 下所有 shell 命令优先使用 Git Bash；只有 Git Bash 未安装、无法启动或
+无法执行该命令时，才使用 PowerShell。不要使用 cmd.exe。切到 PowerShell 后必须
+改用 PowerShell 原生语法、Windows 路径和 $env:变量写法。
+```
+
 ## 2. Recommended Rollout Order
 
 For a large existing content library:
@@ -47,6 +58,9 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 使用 $stoneart-blog-manager 检查这篇博客：
 <博客URL>
 
+运行环境：如果当前是 Windows，所有 shell 命令优先使用 Git Bash；仅 Git Bash
+不存在或命令不可用时才使用 PowerShell，不要使用 cmd.exe。
+
 先不要修改线上内容。读取文章和全部图片，下载后逐张识图，告诉我：
 1. 哪些图片有水印，水印类型和位置
 2. 图片中的雕塑主体、材质、场景和文章关联
@@ -62,6 +76,8 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 
 ```text
 使用 $stoneart-blog-manager 按刚才确认的方案处理这篇文章。
+
+运行环境：Windows 下所有命令优先使用 Git Bash，仅 Git Bash 不可用时回退到 PowerShell；不要使用 cmd.exe。
 
 要求：
 - 只处理确认有水印的图片
@@ -83,6 +99,9 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 ```text
 使用 $stoneart-blog-manager 扫描全部已发布博客。
 
+运行环境：如果当前是 Windows，所有 shell 命令优先使用 Git Bash；仅 Git Bash
+不存在或命令不可用时才使用 PowerShell，不要使用 cmd.exe。
+
 第一阶段只做盘点，不修改、不上传、不发布：
 - 下载每篇博客的封面和正文图片
 - 逐张识图
@@ -97,6 +116,8 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 
 ```text
 使用 $stoneart-blog-manager 执行 work/all-blogs-image-audit.json 中的第 1-20 篇。
+
+运行环境：Windows 下所有命令优先使用 Git Bash，仅 Git Bash 不可用时回退到 PowerShell；不要使用 cmd.exe。
 
 规则：
 - 只处理 foreign watermark
@@ -116,6 +137,8 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 ```text
 使用 $stoneart-blog-manager 对刚处理完的同一批博客做 Google SEO 优化。
 
+运行环境：Windows 下所有命令优先使用 Git Bash，仅 Git Bash 不可用时回退到 PowerShell；不要使用 cmd.exe。
+
 要求：
 - 保留真实项目、尺寸、地点、材料和日期
 - 不编造价格、客户评价、统计数据
@@ -133,6 +156,9 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 
 ```text
 使用 $stoneart-blog-manager 为我规划 5 篇新的博客选题。
+
+运行环境：如果当前是 Windows，所有 shell 命令优先使用 Git Bash；仅 Git Bash
+不存在或命令不可用时才使用 PowerShell，不要使用 cmd.exe。
 
 从以下信息中寻找机会：
 - 素材库中 usage=unused 的图片
@@ -161,6 +187,8 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 ```text
 使用 $stoneart-blog-manager 写第 2 个选题。
 
+运行环境：Windows 下所有命令优先使用 Git Bash，仅 Git Bash 不可用时回退到 PowerShell；不要使用 cmd.exe。
+
 要求：
 - 重新执行本地和 DeepSeek 语义查重，重复风险必须低于 0.35
 - 默认只使用未使用过的图片
@@ -181,6 +209,8 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 ```text
 使用 $stoneart-blog-manager 把刚才确认的方案保存为草稿。
 
+运行环境：Windows 下所有命令优先使用 Git Bash，仅 Git Bash 不可用时回退到 PowerShell；不要使用 cmd.exe。
+
 - 作者：Tian Xiang
 - 职位：General Manager
 - 使用默认头像和简介
@@ -194,6 +224,7 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 
 ```text
 使用 $stoneart-blog-manager 检查这篇草稿的标题、meta description、H2/H3、图片 alt、内部链接和移动端显示。确认无误后发布，并验证公开 URL 和 HTTP 状态。
+（Windows 下优先 Git Bash，仅不可用时回退 PowerShell，不使用 cmd.exe。）
 ```
 
 ## 6. Project-Image Prompt
@@ -201,6 +232,8 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 ```text
 使用 $stoneart-blog-manager 检查这个项目案例的图片：
 <项目标题或URL>
+
+运行环境：Windows 下所有命令优先使用 Git Bash，仅 Git Bash 不可用时回退到 PowerShell；不要使用 cmd.exe。
 
 先 list-projects 找到项目 ID，再下载图片并逐张识图。检查水印、敏感内容、图片重复使用情况和文章关联。
 
@@ -217,24 +250,30 @@ Avoid one prompt that asks the model to process all 196 articles at once. Large 
 ```text
 使用 $stoneart-blog-manager 检查这篇博客，先 dry-run，不要修改：
 <URL>
+（Windows 下优先 Git Bash，仅不可用时回退 PowerShell，不使用 cmd.exe。）
 ```
 
 ```text
 使用 $stoneart-blog-manager 扫描现有博客中有水印的图片，只出报告。
+（Windows 下优先 Git Bash，仅不可用时回退 PowerShell，不使用 cmd.exe。）
 ```
 
 ```text
 使用 $stoneart-blog-manager 从没用过的素材图中找 3 个不与现有博客重复的新选题。
+（Windows 下优先 Git Bash，仅不可用时回退 PowerShell，不使用 cmd.exe。）
 ```
 
 ```text
 使用 $stoneart-blog-manager 给我看这个 skill 的推荐使用流程和提示词，先不要执行任务。
+（Windows 下优先 Git Bash，仅不可用时回退 PowerShell，不使用 cmd.exe。）
 ```
 
 ## 8. DeepSeek and CC Switch Safety Prompt
 
 ```text
 使用 $stoneart-blog-manager，当前 Codex 通过 CC Switch 使用 deepseek-flash。
+
+运行环境：Windows 下所有命令优先使用 Git Bash，仅 Git Bash 不可用时回退到 PowerShell；不要使用 cmd.exe。
 
 请避免并行工具调用和工具结果之间插入普通助手消息。批量检查图片时使用：
 python scripts/stoneart_blog.py vision-batch --image ... --image ... --batch-size 3
